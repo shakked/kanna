@@ -378,6 +378,12 @@ interface StartTurnArgs {
   model: string
   effort?: string
   serviceTier?: "fast"
+  /**
+   * The provider's options, normalized, that `model`, `effort` and
+   * `serviceTier` were resolved from. Recorded with the turn so a turn the
+   * user did not send (a report, a resume) runs the same way.
+   */
+  modelOptions?: ModelOptions
   planMode: boolean
   autoPlan: boolean
   appendUserPrompt: boolean
@@ -1758,6 +1764,7 @@ export class AgentCoordinator {
         serviceTier: serviceTierFromModelOptions(modelOptions),
         planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
         autoPlan: catalog.supportsAutoPlanMode ? Boolean(options.autoPlan) : false,
+        modelOptions: { claude: modelOptions },
       }
     }
 
@@ -1769,6 +1776,7 @@ export class AgentCoordinator {
         serviceTier: undefined,
         planMode: false,
         autoPlan: false,
+        modelOptions: { cursor: modelOptions },
       }
     }
 
@@ -1780,6 +1788,7 @@ export class AgentCoordinator {
         serviceTier: undefined,
         planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
         autoPlan: false,
+        modelOptions: { grok: modelOptions },
       }
     }
 
@@ -1791,6 +1800,7 @@ export class AgentCoordinator {
         serviceTier: undefined,
         planMode: false,
         autoPlan: false,
+        modelOptions: { pi: modelOptions },
       }
     }
 
@@ -1802,6 +1812,7 @@ export class AgentCoordinator {
       serviceTier: serviceTierFromModelOptions(modelOptions),
       planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
       autoPlan: catalog.supportsAutoPlanMode ? Boolean(options.autoPlan) : false,
+      modelOptions: { codex: modelOptions },
     }
   }
 
@@ -1839,6 +1850,7 @@ export class AgentCoordinator {
       model: settings.model,
       effort: settings.effort,
       serviceTier: settings.serviceTier,
+      modelOptions: settings.modelOptions,
       planMode: settings.planMode,
       autoPlan: settings.autoPlan,
       appendUserPrompt: true,
@@ -2110,7 +2122,7 @@ export class AgentCoordinator {
       )
       await this.store.appendMessage(args.chatId, userPromptEntry)
     }
-    await this.store.recordTurnStarted(args.chatId, args.model)
+    await this.store.recordTurnStarted(args.chatId, args.model, args.modelOptions)
 
     if (shouldGenerateTitle) {
       void this.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? "New Chat")
@@ -2534,6 +2546,7 @@ export class AgentCoordinator {
       model: settings.model,
       effort: settings.effort,
       serviceTier: settings.serviceTier,
+      modelOptions: settings.modelOptions,
       planMode: settings.planMode,
       autoPlan: settings.autoPlan,
       appendUserPrompt: true,
@@ -2773,11 +2786,12 @@ export class AgentCoordinator {
     if (!chat.sessionToken && !chat.pendingForkSessionToken) return false
 
     // Everything the chat record remembers about how the turn was running:
-    // the model it actually ran with plus the two persisted modes. Reasoning
-    // effort and fast mode are picked in the composer and never stored server
-    // side, so the resumed turn falls back to the provider defaults for those.
+    // the model and options it actually ran with plus the two persisted modes.
+    // A chat whose turns predate `lastModelOptions` falls back to the
+    // provider defaults for effort and fast mode.
     const settings = this.getProviderSettings(chat.provider, {
       model: chat.lastModel,
+      modelOptions: chat.lastModelOptions,
       planMode: chat.planMode,
       autoPlan: chat.autoPlan,
     })
@@ -2789,6 +2803,7 @@ export class AgentCoordinator {
       model: settings.model,
       effort: settings.effort,
       serviceTier: settings.serviceTier,
+      modelOptions: settings.modelOptions,
       planMode: settings.planMode,
       autoPlan: settings.autoPlan,
       appendUserPrompt: false,

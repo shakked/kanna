@@ -62,6 +62,7 @@ import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
 import { CHAT_MIN_WORKSPACE_SIZE_PERCENT, WidgetsColumn } from "./WidgetsColumn"
 import { useChatPageSidebarActions, EMPTY_DIFF_SNAPSHOT } from "./useChatPageSidebarActions"
 import { useTranscriptJumpRequest } from "./useTranscriptJumpRequest"
+import { useUsageLimitsSnapshot } from "../../hooks/useUsageLimitsSnapshot"
 import { useTranscriptPaddingBottom } from "./useTranscriptPaddingBottom"
 import {
   EMPTY_STATE_TEXT,
@@ -580,6 +581,7 @@ export function ChatPage() {
     baseContextWindowSnapshotRef.current = derivedSnapshot
     return derivedSnapshot
   }, [state.chatSnapshot?.messages])
+  const usageLimits = useUsageLimitsSnapshot(state.socket)
 
   const isMobileViewport = useIsMobileViewport()
   // On a delegator the list of the chats under it is the floor of the pane:
@@ -1395,6 +1397,7 @@ export function ChatPage() {
         activeProvider={state.runtime?.provider ?? null}
         availableProviders={state.availableProviders}
         contextWindowSnapshot={contextWindowSnapshot}
+        usageLimits={usageLimits}
         onSubmit={handleChatSubmit}
         onCancel={handleCancel}
         onEditModels={handleEditModels}

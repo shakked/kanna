@@ -10,6 +10,7 @@ import {
   type ModelOptions,
   type ProviderCatalogEntry,
   resolveClaudeContextWindowMaxTokens,
+  type UsageLimitsSnapshot,
 } from "../../../shared/types"
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
@@ -34,6 +35,8 @@ import { shouldSteerSubmit } from "../../../shared/submit-mode"
 import { SignInDialog } from "../auth/SignInDialog"
 import { ChatPreferenceControls } from "./ChatPreferenceControls"
 import { ContextWindowMeter } from "./ContextWindowMeter"
+import { ComposerUsageBar } from "./ComposerUsageBar"
+import { selectComposerUsage } from "../../lib/composerUsage"
 import { AttachmentFileCard, AttachmentImageCard } from "../messages/AttachmentCard"
 import { getChatViewer, useViewerStore, viewerAttachmentFromChat } from "../../stores/viewerStore"
 import { activateAttachment } from "../viewer/attachmentActions"
@@ -202,6 +205,8 @@ interface Props {
   activeProvider: AgentProvider | null
   availableProviders: ProviderCatalogEntry[]
   contextWindowSnapshot?: ContextWindowSnapshot | null
+  /** Plan usage for every provider; the composer shows the selected one's. */
+  usageLimits?: UsageLimitsSnapshot | null
   previousPrompt?: string | null
   onEditModels?: () => void
   /** Enumerates the selected harness's invocable skills for the "/" menu. */
@@ -251,6 +256,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   activeProvider,
   availableProviders,
   contextWindowSnapshot = null,
+  usageLimits = null,
   previousPrompt = null,
   onEditModels,
   onListSkills,
@@ -345,6 +351,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
     return overrideContextWindowMaxTokens(contextWindowSnapshot, resolveClaudeContextWindowMaxTokens(providerPrefs.model))
   }, [contextWindowSnapshot, providerPrefs.model, providerPrefs.provider])
+  const composerUsage = useMemo(
+    () => selectComposerUsage(usageLimits, providerPrefs.provider, providerPrefs.model),
+    [usageLimits, providerPrefs.model, providerPrefs.provider],
+  )
   // "/" skill menu derivations. The mention is non-null only while the caret
   // is inside a "/token" anywhere in the prompt ("$token" also opens it on
   // codex, whose native sigil is "$" — accepting still completes to the
@@ -1409,6 +1419,12 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             hideDefaults
             className="max-w-[840px] mx-auto"
           />
+          {/* Below lg the usage bar rides at the end of the row, beside the
+              dial, so appearing never pushes the controls before it. From md
+              the dial is pinned over the row's right edge; mr-9 clears it. */}
+          {composerUsage ? (
+            <ComposerUsageBar usage={composerUsage} className="ml-2 self-center md:mr-9 lg:hidden" />
+          ) : null}
           {activeContextWindow ? (
             <div className="mx-[13px] flex items-center gap-2 md:hidden">
               <ContextWindowMeter usage={activeContextWindow} />
@@ -1416,6 +1432,18 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
           ) : null}
           <div className={controlsScrollSpacer} />
         </div>
+
+        {/* The dial's mirror: pinned left, out of the centred row's flow, so
+            it can come and go (provider switch, first push) without moving
+            anything. Only from lg, where the row's centring leaves it room. */}
+        {composerUsage ? (
+          <div className={cn(
+            "absolute inset-y-0 left-[13px] hidden items-center lg:flex",
+            isStandalone ? "pt-3 pb-5" : "py-3"
+          )}>
+            <ComposerUsageBar usage={composerUsage} />
+          </div>
+        ) : null}
 
         {/* right-[17px] is where the dial has always sat: right-[29px]
             pulled back by translate-x-1/2 of its own 24px. */}

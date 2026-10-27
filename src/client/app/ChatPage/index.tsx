@@ -68,6 +68,7 @@ import {
   EMPTY_STATE_TEXT,
   EMPTY_STATE_TYPING_INTERVAL_MS,
   hasFileDragTypes,
+  holdContextWindowSnapshot,
   sameContextWindowSnapshot,
 } from "./utils"
 
@@ -571,16 +572,23 @@ export function ChatPage() {
   const editorPreset = useTerminalPreferencesStore((store) => store.editorPreset)
   const editorCommandTemplate = useTerminalPreferencesStore((store) => store.editorCommandTemplate)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(state.keybindings), [state.keybindings])
-  const baseContextWindowSnapshotRef = useRef<ReturnType<typeof deriveLatestContextWindowSnapshot>>(null)
+  const baseContextWindowSnapshotRef = useRef<{
+    chatId: string | null
+    snapshot: ReturnType<typeof deriveLatestContextWindowSnapshot>
+  } | null>(null)
   const contextWindowSnapshot = useMemo(() => {
-    const derivedSnapshot = deriveLatestContextWindowSnapshot(state.chatSnapshot?.messages ?? EMPTY_TRANSCRIPT_ENTRIES)
-    const previousSnapshot = baseContextWindowSnapshotRef.current
-    if (sameContextWindowSnapshot(previousSnapshot, derivedSnapshot)) {
-      return previousSnapshot
+    const previous = baseContextWindowSnapshotRef.current
+    const nextSnapshot = holdContextWindowSnapshot(
+      previous,
+      state.activeChatId,
+      deriveLatestContextWindowSnapshot(state.chatSnapshot?.messages ?? EMPTY_TRANSCRIPT_ENTRIES),
+    )
+    if (previous?.chatId === state.activeChatId && sameContextWindowSnapshot(previous.snapshot, nextSnapshot)) {
+      return previous.snapshot
     }
-    baseContextWindowSnapshotRef.current = derivedSnapshot
-    return derivedSnapshot
-  }, [state.chatSnapshot?.messages])
+    baseContextWindowSnapshotRef.current = { chatId: state.activeChatId, snapshot: nextSnapshot }
+    return nextSnapshot
+  }, [state.activeChatId, state.chatSnapshot?.messages])
   const usageLimits = useUsageLimitsSnapshot(state.socket)
 
   const isMobileViewport = useIsMobileViewport()

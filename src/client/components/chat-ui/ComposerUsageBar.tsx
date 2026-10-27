@@ -25,7 +25,7 @@ function useMinuteTick() {
  * The selected provider's plan usage beside the composer's options row: one
  * thin meter per window that limits the current model, shortest first
  * ("5h ▬▬ 42% 2h 14m" over "Wk ▬ 18% 3d 4h"), in the context dial's 9px
- * type so the stack fits the row. Full names on hover; opens the command palette's Usage page.
+ * type, spread to the dial's 24px height. Full names on hover; opens the command palette's Usage page.
  */
 export function ComposerUsageBar({ rows, className }: { rows: ComposerUsageRow[]; className?: string }) {
   useMinuteTick()
@@ -42,7 +42,10 @@ export function ComposerUsageBar({ rows, className }: { rows: ComposerUsageRow[]
           onClick={() => openCommandPalette("usage")}
           aria-label={`Plan usage: ${summary}. Open usage`}
           className={cn(
-            "grid shrink-0 cursor-pointer grid-cols-[auto_40px_auto_auto] items-center gap-x-1.5 rounded-md px-1 text-left text-[9px] font-medium leading-[9px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "grid min-h-6 shrink-0 cursor-pointer grid-cols-[auto_40px_auto_auto] items-center gap-x-1.5 rounded-md px-1 text-left text-[9px] font-medium leading-[9px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            // As tall as the context ring (24px): rows spread over it, a lone
+            // row centred in it; three or more fill it on their own.
+            rows.length > 1 ? "content-between" : "content-center",
             className,
           )}
         >

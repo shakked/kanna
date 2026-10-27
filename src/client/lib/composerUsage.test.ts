@@ -47,6 +47,15 @@ describe("selectComposerUsage", () => {
     expect(ids(selectComposerUsage(reversed, "claude", "opus"))).toEqual(["five_hour", "seven_day"])
   })
 
+  test("keeps a window whose reset has passed, at 0%, so the rows don't change", () => {
+    const afterFiveHourReset = Date.parse("2026-10-27T18:30:00.000Z")
+    const rows = selectComposerUsage(CLAUDE, "claude", "opus", afterFiveHourReset)
+    expect(ids(rows)).toEqual(["five_hour", "seven_day", "seven_day_opus"])
+    expect(rows?.every((row) => row.window.usedPercent === 0 && row.window.resetsAt === null)).toBe(true)
+    const before = selectComposerUsage(CLAUDE, "claude", "opus", Date.parse("2026-10-27T12:00:00.000Z"))
+    expect(before?.map((row) => row.window.usedPercent)).toEqual([42, 18, 61])
+  })
+
   test("returns null when the selected provider has no live limits", () => {
     expect(selectComposerUsage(null, "claude", "opus")).toBeNull()
     expect(selectComposerUsage(CLAUDE, "codex", "gpt-5.5")).toBeNull()

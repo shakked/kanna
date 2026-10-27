@@ -59,6 +59,17 @@ export function formatResetCountdown(resetsAt: string | null, now: number = Date
   return `${minutes}m`
 }
 
+/**
+ * A window as it stands at `now`: past its reset with no newer read, the limit
+ * is back to empty, so 0% with no countdown (the server merges the same way on
+ * its next read) rather than the old figure.
+ */
+export function windowAsOf(window: UsageLimitWindow, now: number = Date.now()): UsageLimitWindow {
+  return window.resetsAt !== null && Date.parse(window.resetsAt) <= now
+    ? { ...window, usedPercent: 0, resetsAt: null }
+    : window
+}
+
 const SPAN_MINUTES = { minute: 1, hour: 60, day: 1440 } as const
 
 /** A window's length in minutes, read off its label; unknown spans sort last. */
@@ -87,17 +98,20 @@ export function shortUsageLabel(window: UsageLimitWindow): string {
 
 /**
  * Every limit on the composer's provider and model, shortest window first,
- * or null when that provider reports none.
+ * or null when that provider reports none. The server keeps every window it
+ * has seen (`mergeUsageWindows`), so the rows stay put between reads.
  */
 export function selectComposerUsage(
   snapshot: UsageLimitsSnapshot | null,
   provider: AgentProvider,
   model: string | null,
+  now: number = Date.now(),
 ): ComposerUsageRow[] | null {
   const providerSnapshot = snapshot?.providers.find((entry) => entry.provider === provider)
   if (!providerSnapshot || providerSnapshot.status !== "ok") return null
   const rows = windowsForModel(provider, providerSnapshot.windows, model)
     .filter((window) => window.usedPercent !== null)
+    .map((window) => windowAsOf(window, now))
     .map((window, index) => ({ window, index, minutes: windowMinutes(window) }))
     .sort((a, b) => a.minutes - b.minutes || a.index - b.index)
     .map(({ window }) => ({ window, shortLabel: shortUsageLabel(window) }))

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react"
 import { formatPercent, formatUntil } from "../../app/settings/UsageSection"
 import { openCommandPalette } from "../command-palette/CommandPalette"
-import { formatResetCountdown, type ComposerUsageRow } from "../../lib/composerUsage"
+import { formatResetCountdown, windowAsOf, type ComposerUsageRow } from "../../lib/composerUsage"
 import { formatRelativeTime } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
@@ -27,8 +27,10 @@ function useMinuteTick() {
  * ("5h ▬▬ 42% 2h 14m" over "Wk ▬ 18% 3d 4h"), in the context dial's 9px
  * type, spread to the dial's 24px height. Full names on hover; opens the command palette's Usage page.
  */
-export function ComposerUsageBar({ rows, className }: { rows: ComposerUsageRow[]; className?: string }) {
+export function ComposerUsageBar({ rows: rawRows, className }: { rows: ComposerUsageRow[]; className?: string }) {
   useMinuteTick()
+  // Re-read each minute, so a window that resets mid-session drops to 0%.
+  const rows = rawRows.map((row) => ({ ...row, window: windowAsOf(row.window) }))
   const summary = rows.map(({ window }) => {
     const countdown = formatResetCountdown(window.resetsAt)
     return `${window.label} ${formatPercent(window.usedPercent)} used${countdown ? `, resets in ${countdown}` : ""}`

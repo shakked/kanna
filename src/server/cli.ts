@@ -7,7 +7,7 @@ import {
   openUrl,
   runCli,
 } from "./cli-runtime"
-import { CLI_STARTUP_UPDATE_RESTART_EXIT_CODE, CLI_UI_UPDATE_RESTART_EXIT_CODE } from "./restart"
+import { CLI_RELOAD_SIGNAL, CLI_STARTUP_UPDATE_RESTART_EXIT_CODE, CLI_UI_UPDATE_RESTART_EXIT_CODE } from "./restart"
 import { installNightlyBuild } from "./nightly"
 import { startKannaServer } from "./server"
 import { startCloudflaredBackgroundUpdate } from "./cloudflared-updater"
@@ -75,6 +75,14 @@ const exitAction = await new Promise<"ui_restart" | "exit">((resolve) => {
 
   process.once("SIGINT", shutdown)
   process.once("SIGTERM", shutdown)
+  // `kill -USR2 <server pid>`: stop and hand back to the supervisor, which
+  // starts the server again from whatever `kanna` is installed now. Sent to
+  // this child, not the supervisor, so the Mac app's window and the
+  // supervisor's lock stay up (~/.kanna/bin/kanna-reload).
+  process.once(CLI_RELOAD_SIGNAL, () => {
+    console.log(`${LOG_PREFIX} ${CLI_RELOAD_SIGNAL} received, restarting the server in place`)
+    resolve("ui_restart")
+  })
   exitWithParent(() => {
     if (!result.releasedFromParent?.()) shutdown()
   })

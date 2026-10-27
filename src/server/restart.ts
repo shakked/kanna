@@ -7,6 +7,9 @@ export const CLI_UI_UPDATE_RESTART_EXIT_CODE = 76
 export const CLI_CHILD_COMMAND_ENV_VAR = "KANNA_CLI_CHILD_COMMAND"
 export const CLI_CHILD_ARGS_ENV_VAR = "KANNA_CLI_CHILD_ARGS"
 export const CLI_SUPPRESS_OPEN_ONCE_ENV_VAR = "KANNA_SUPPRESS_OPEN_ONCE"
+/** Sent to the server child, it exits with CLI_UI_UPDATE_RESTART_EXIT_CODE
+ *  and the supervisor starts a fresh one: a reload after a local install. */
+export const CLI_RELOAD_SIGNAL: NodeJS.Signals = "SIGUSR2"
 
 export function shouldRestartCliProcess(code: number | null, signal: NodeJS.Signals | null) {
   return signal === null && (code === CLI_STARTUP_UPDATE_RESTART_EXIT_CODE || code === CLI_UI_UPDATE_RESTART_EXIT_CODE)

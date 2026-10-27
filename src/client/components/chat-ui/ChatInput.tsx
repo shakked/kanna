@@ -1423,7 +1423,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
               dial, so appearing never pushes the controls before it. From md
               the dial is pinned over the row's right edge; mr-9 clears it. */}
           {composerUsage ? (
-            <ComposerUsageBar usage={composerUsage} className="ml-2 self-center md:mr-9 lg:hidden" />
+            <ComposerUsageBar rows={composerUsage} className="ml-2 self-center md:mr-9 lg:hidden" />
           ) : null}
           {activeContextWindow ? (
             <div className="mx-[13px] flex items-center gap-2 md:hidden">
@@ -1441,7 +1441,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             "absolute inset-y-0 left-[13px] hidden items-center lg:flex",
             isStandalone ? "pt-3 pb-5" : "py-3"
           )}>
-            <ComposerUsageBar usage={composerUsage} />
+            <ComposerUsageBar rows={composerUsage} />
           </div>
         ) : null}
 

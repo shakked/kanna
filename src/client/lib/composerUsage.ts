@@ -1,8 +1,10 @@
 import { deriveModelLabel } from "../../shared/types"
 import type { AgentProvider, UsageLimitWindow, UsageLimitsSnapshot } from "../../shared/types"
 
-export interface ComposerUsage {
+export interface ComposerUsageRow {
   window: UsageLimitWindow
+  /** A row label just long enough to tell the stack apart: "5h", "Wk", "Opus". */
+  shortLabel: string
 }
 
 /** Model-specific Claude weekly windows and the model family each one limits. */
@@ -57,22 +59,47 @@ export function formatResetCountdown(resetsAt: string | null, now: number = Date
   return `${minutes}m`
 }
 
+const SPAN_MINUTES = { minute: 1, hour: 60, day: 1440 } as const
+
+/** A window's length in minutes, read off its label; unknown spans sort last. */
+function windowMinutes(window: UsageLimitWindow): number {
+  const base = window.label.split(" · ")[0]
+  const span = /(\d+)-(minute|hour|day)/.exec(base)
+  if (span) return Number(span[1]) * SPAN_MINUTES[span[2] as keyof typeof SPAN_MINUTES]
+  if (/week/i.test(base)) return 10080
+  if (/month/i.test(base)) return 43200
+  return Number.POSITIVE_INFINITY
+}
+
 /**
- * The limit the composer's provider and model are closest to hitting, or null
- * when that provider reports no limits. The fullest window is the one that
- * will stop the next turn first, so it's the one worth a glance.
+ * "Current session (5-hour)" → "5h", "Weekly · All models" → "Wk",
+ * "Weekly · Opus" → "Opus", "5-hour · GPT 5.3 Codex Spark" → "5h Spark".
+ */
+export function shortUsageLabel(window: UsageLimitWindow): string {
+  const [base, suffix] = window.label.split(" · ")
+  const span = /(\d+)-(minute|hour|day)/.exec(base)
+  const head = span ? `${span[1]}${span[2][0]}` : /week/i.test(base) ? "Wk" : base.split(/\s+/)[0]
+  if (!suffix || /^All (models|products)$/.test(suffix)) return head
+  const lane = suffix.split(/\s+/).at(-1) ?? suffix
+  // Claude's weekly model lanes are one per family, so the family is enough.
+  return window.id.startsWith("seven_day_") ? lane : `${head} ${lane}`
+}
+
+/**
+ * Every limit on the composer's provider and model, shortest window first,
+ * or null when that provider reports none.
  */
 export function selectComposerUsage(
   snapshot: UsageLimitsSnapshot | null,
   provider: AgentProvider,
   model: string | null,
-): ComposerUsage | null {
+): ComposerUsageRow[] | null {
   const providerSnapshot = snapshot?.providers.find((entry) => entry.provider === provider)
   if (!providerSnapshot || providerSnapshot.status !== "ok") return null
-  const candidates = windowsForModel(provider, providerSnapshot.windows, model)
+  const rows = windowsForModel(provider, providerSnapshot.windows, model)
     .filter((window) => window.usedPercent !== null)
-  if (candidates.length === 0) return null
-  const window = candidates.reduce((fullest, next) =>
-    (next.usedPercent ?? 0) > (fullest.usedPercent ?? 0) ? next : fullest)
-  return { window }
+    .map((window, index) => ({ window, index, minutes: windowMinutes(window) }))
+    .sort((a, b) => a.minutes - b.minutes || a.index - b.index)
+    .map(({ window }) => ({ window, shortLabel: shortUsageLabel(window) }))
+  return rows.length > 0 ? rows : null
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ProviderUsageSnapshot, UsageLimitWindow, UsageLimitsSnapshot } from "../../shared/types"
-import { formatResetCountdown, selectComposerUsage } from "./composerUsage"
+import { formatResetCountdown, selectComposerUsage, shortUsageLabel } from "./composerUsage"
 
 function makeWindow(id: string, label: string, usedPercent: number | null): UsageLimitWindow {
   return {
@@ -26,12 +26,25 @@ const CLAUDE = makeSnapshot("claude", [
   makeWindow("seven_day_sonnet", "Weekly · Sonnet", 90),
 ])
 
+const ids = (rows: ReturnType<typeof selectComposerUsage>) => rows?.map((row) => row.window.id) ?? null
+const labels = (rows: ReturnType<typeof selectComposerUsage>) => rows?.map((row) => row.shortLabel) ?? null
+
 describe("selectComposerUsage", () => {
-  test("picks the fullest window that limits the selected Claude model", () => {
-    expect(selectComposerUsage(CLAUDE, "claude", "claude-opus-5-5")?.window.id).toBe("seven_day_opus")
-    expect(selectComposerUsage(CLAUDE, "claude", "sonnet")?.window.id).toBe("seven_day_sonnet")
+  test("stacks every window that limits the selected Claude model, shortest first", () => {
+    const rows = selectComposerUsage(CLAUDE, "claude", "claude-opus-5-5")
+    expect(ids(rows)).toEqual(["five_hour", "seven_day", "seven_day_opus"])
+    expect(labels(rows)).toEqual(["5h", "Wk", "Opus"])
+    expect(ids(selectComposerUsage(CLAUDE, "claude", "sonnet"))).toEqual(["five_hour", "seven_day", "seven_day_sonnet"])
     // Haiku isn't limited by either family lane.
-    expect(selectComposerUsage(CLAUDE, "claude", "claude-haiku-5-5")?.window.id).toBe("five_hour")
+    expect(ids(selectComposerUsage(CLAUDE, "claude", "claude-haiku-5-5"))).toEqual(["five_hour", "seven_day"])
+  })
+
+  test("orders by window length, not by the order the provider reported", () => {
+    const reversed = makeSnapshot("claude", [
+      makeWindow("seven_day", "Weekly · All models", 18),
+      makeWindow("five_hour", "Current session (5-hour)", 42),
+    ])
+    expect(ids(selectComposerUsage(reversed, "claude", "opus"))).toEqual(["five_hour", "seven_day"])
   })
 
   test("returns null when the selected provider has no live limits", () => {
@@ -46,9 +59,10 @@ describe("selectComposerUsage", () => {
       makeWindow("codex:primary", "5-hour · All models", 20),
       makeWindow("codex:secondary", "Weekly · All models", 30),
       makeWindow("spark:primary", "5-hour · GPT 5.3 Codex Spark", 95),
+      makeWindow("spark:secondary", "Weekly · GPT 5.3 Codex Spark", 40),
     ])
-    expect(selectComposerUsage(codex, "codex", "gpt-5.5")?.window.id).toBe("codex:secondary")
-    expect(selectComposerUsage(codex, "codex", "gpt-5.3-codex-spark")?.window.id).toBe("spark:primary")
+    expect(labels(selectComposerUsage(codex, "codex", "gpt-5.5"))).toEqual(["5h", "Wk"])
+    expect(labels(selectComposerUsage(codex, "codex", "gpt-5.3-codex-spark"))).toEqual(["5h", "5h Spark", "Wk", "Wk Spark"])
   })
 
   test("uses Grok's shared credit pool when it is reported", () => {
@@ -56,7 +70,18 @@ describe("selectComposerUsage", () => {
       makeWindow("credits", "Weekly · All products", 12),
       makeWindow("grok-build", "Weekly · Grok Build", 80),
     ])
-    expect(selectComposerUsage(grok, "grok", "grok-code")?.window.id).toBe("credits")
+    const rows = selectComposerUsage(grok, "grok", "grok-code")
+    expect(ids(rows)).toEqual(["credits"])
+    expect(labels(rows)).toEqual(["Wk"])
+  })
+})
+
+describe("shortUsageLabel", () => {
+  test("keeps row labels to a few characters", () => {
+    expect(shortUsageLabel(makeWindow("codex:primary", "15-minute", 1))).toBe("15m")
+    expect(shortUsageLabel(makeWindow("codex:primary", "3-day", 1))).toBe("3d")
+    expect(shortUsageLabel(makeWindow("seven_day_sonnet", "Weekly · Sonnet", 1))).toBe("Sonnet")
+    expect(shortUsageLabel(makeWindow("grok-build", "Weekly · Grok Build", 1))).toBe("Wk Build")
   })
 })
 

@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { formatPercent, formatUntil } from "../../app/settings/UsageSection"
-import { formatResetCountdown, type ComposerUsage } from "../../lib/composerUsage"
+import { formatResetCountdown, type ComposerUsageRow } from "../../lib/composerUsage"
 import { formatRelativeTime } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
@@ -12,7 +12,7 @@ function fillColorClass(usedPercent: number): string {
   return "bg-muted-foreground"
 }
 
-/** Re-renders once a minute, for the reset countdown. */
+/** Re-renders once a minute, for the reset countdowns. */
 function useMinuteTick() {
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -22,22 +22,18 @@ function useMinuteTick() {
 }
 
 /**
- * The selected provider's plan usage, as a slim meter beside the composer's
- * options row: "42% ▬▬ 2h 14m" for the window the current model is closest
- * to using up, with the full window name on hover. Opens Settings → Usage.
- * The context dial's counterpart on the other side of the row.
+ * The selected provider's plan usage beside the composer's options row: one
+ * thin meter per window that limits the current model, shortest first
+ * ("5h ▬▬ 42% 2h 14m" over "Wk ▬ 18% 3d 4h"), in the context dial's 9px
+ * type so the stack fits the row. Full names on hover; opens Settings → Usage.
  */
-export function ComposerUsageBar({ usage, className }: { usage: ComposerUsage; className?: string }) {
-  const { window } = usage
+export function ComposerUsageBar({ rows, className }: { rows: ComposerUsageRow[]; className?: string }) {
   const navigate = useNavigate()
   useMinuteTick()
-  const usedPercent = Math.max(0, Math.min(100, window.usedPercent ?? 0))
-  const percentText = formatPercent(window.usedPercent)
-  const resets = window.resetsAt ? formatUntil(window.resetsAt) : null
-  const countdown = formatResetCountdown(window.resetsAt)
-  // Pushed and refreshed reads are current; a cached one is from an earlier
-  // session, so say how old it is.
-  const stale = window.source === "cache" ? `Updated ${formatRelativeTime(window.recordedAt)}` : null
+  const summary = rows.map(({ window }) => {
+    const countdown = formatResetCountdown(window.resetsAt)
+    return `${window.label} ${formatPercent(window.usedPercent)} used${countdown ? `, resets in ${countdown}` : ""}`
+  }).join("; ")
 
   return (
     <Tooltip delayDuration={0}>
@@ -45,32 +41,50 @@ export function ComposerUsageBar({ usage, className }: { usage: ComposerUsage; c
         <button
           type="button"
           onClick={() => navigate("/settings/usage")}
-          aria-label={`${window.label}: ${percentText} used${countdown ? `, resets in ${countdown}` : ""}. Open usage settings`}
+          aria-label={`Plan usage: ${summary}. Open usage settings`}
           className={cn(
-            "inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "grid shrink-0 cursor-pointer grid-cols-[auto_40px_auto_auto] items-center gap-x-1.5 rounded-md px-1 text-left text-[9px] font-medium leading-[9px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             className,
           )}
         >
-          <span className="whitespace-nowrap tabular-nums">{percentText}</span>
-          <span className="h-1 w-12 overflow-hidden rounded-full bg-muted-foreground/20" aria-hidden="true">
-            <span
-              className={cn("block h-full rounded-full transition-[width] duration-500 ease-out", fillColorClass(usedPercent))}
-              style={{ width: `${usedPercent > 0 ? Math.max(4, usedPercent) : 0}%` }}
-            />
-          </span>
-          {countdown ? <span className="whitespace-nowrap tabular-nums">{countdown}</span> : null}
+          {rows.map(({ window, shortLabel }) => {
+            const usedPercent = Math.max(0, Math.min(100, window.usedPercent ?? 0))
+            return (
+              <Fragment key={window.id}>
+                <span className="whitespace-nowrap">{shortLabel}</span>
+                <span className="h-[3px] overflow-hidden rounded-full bg-muted-foreground/20" aria-hidden="true">
+                  <span
+                    className={cn("block h-full rounded-full transition-[width] duration-500 ease-out", fillColorClass(usedPercent))}
+                    style={{ width: `${usedPercent > 0 ? Math.max(4, usedPercent) : 0}%` }}
+                  />
+                </span>
+                <span className="whitespace-nowrap text-right tabular-nums">{formatPercent(window.usedPercent)}</span>
+                <span className="whitespace-nowrap tabular-nums">{formatResetCountdown(window.resetsAt) ?? ""}</span>
+              </Fragment>
+            )
+          })}
         </button>
       </TooltipTrigger>
       <TooltipContent side="top" align="start" className="w-max max-w-none px-3 py-2">
-        <div className="space-y-1 leading-tight">
-          <div className="whitespace-nowrap text-xs font-medium text-foreground">
-            {window.label} · {percentText} used
-          </div>
-          {resets || stale ? (
-            <div className="whitespace-nowrap text-xs text-muted-foreground">
-              {[resets ? `Resets ${resets}` : null, stale].filter(Boolean).join(" · ")}
-            </div>
-          ) : null}
+        <div className="space-y-1.5 leading-tight">
+          {rows.map(({ window }) => {
+            const resets = window.resetsAt ? formatUntil(window.resetsAt) : null
+            // Pushed and refreshed reads are current; a cached one is from an
+            // earlier session, so say how old it is.
+            const stale = window.source === "cache" ? `Updated ${formatRelativeTime(window.recordedAt)}` : null
+            return (
+              <div key={window.id}>
+                <div className="whitespace-nowrap text-xs font-medium text-foreground">
+                  {window.label} · {formatPercent(window.usedPercent)} used
+                </div>
+                {resets || stale ? (
+                  <div className="whitespace-nowrap text-xs text-muted-foreground">
+                    {[resets ? `Resets ${resets}` : null, stale].filter(Boolean).join(" · ")}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
         </div>
       </TooltipContent>
     </Tooltip>

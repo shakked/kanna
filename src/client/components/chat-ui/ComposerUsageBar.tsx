@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { formatPercent, formatUntil } from "../../app/settings/UsageSection"
+import { openCommandPalette } from "../command-palette/CommandPalette"
 import { formatResetCountdown, type ComposerUsageRow } from "../../lib/composerUsage"
 import { formatRelativeTime } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
@@ -25,10 +25,9 @@ function useMinuteTick() {
  * The selected provider's plan usage beside the composer's options row: one
  * thin meter per window that limits the current model, shortest first
  * ("5h ▬▬ 42% 2h 14m" over "Wk ▬ 18% 3d 4h"), in the context dial's 9px
- * type so the stack fits the row. Full names on hover; opens Settings → Usage.
+ * type so the stack fits the row. Full names on hover; opens the command palette's Usage page.
  */
 export function ComposerUsageBar({ rows, className }: { rows: ComposerUsageRow[]; className?: string }) {
-  const navigate = useNavigate()
   useMinuteTick()
   const summary = rows.map(({ window }) => {
     const countdown = formatResetCountdown(window.resetsAt)
@@ -40,8 +39,8 @@ export function ComposerUsageBar({ rows, className }: { rows: ComposerUsageRow[]
       <TooltipTrigger asChild>
         <button
           type="button"
-          onClick={() => navigate("/settings/usage")}
-          aria-label={`Plan usage: ${summary}. Open usage settings`}
+          onClick={() => openCommandPalette("usage")}
+          aria-label={`Plan usage: ${summary}. Open usage`}
           className={cn(
             "grid shrink-0 cursor-pointer grid-cols-[auto_40px_auto_auto] items-center gap-x-1.5 rounded-md px-1 text-left text-[9px] font-medium leading-[9px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             className,

@@ -80,7 +80,7 @@ import {
   normalizeServerModel,
   serviceTierFromModelOptions,
 } from "./provider-catalog"
-import { resolveClaudeApiModelId } from "../shared/types"
+import { resolveClaudeApiModelId, type ChatProviderPreferences } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { asNumber, asRecord } from "../shared/json"
 import { buildHandoffContext, buildHandoffMessageContent, type HandoffContext } from "./handoff"
@@ -331,6 +331,12 @@ interface AgentCoordinatorArgs {
     provider: AgentProvider,
     query: { cwd: string; sessionToken: string | null | undefined }
   ) => SessionArtifactStatus
+  /**
+   * The user's saved per-provider defaults (Settings). A turn that arrives
+   * without options for its provider (a migrated chat, an MCP send that named
+   * none) runs with these rather than the built-in ones (1m, high effort).
+   */
+  getProviderDefaults?: () => ChatProviderPreferences
 }
 
 
@@ -1141,6 +1147,7 @@ export class AgentCoordinator {
   private readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
   private readonly checkSessionArtifactFn: NonNullable<AgentCoordinatorArgs["checkSessionArtifact"]>
   private secretsService: SecretsService | null
+  private readonly getProviderDefaults: AgentCoordinatorArgs["getProviderDefaults"]
   private reportBackgroundError: ((message: string) => void) | null = null
   private onClaudeRateLimit: ((info: ClaudeRateLimitInfoRaw) => void) | null = null
   private cursorModelCatalogApplied = false
@@ -1205,6 +1212,7 @@ export class AgentCoordinator {
     this.startClaudeSessionFn = args.startClaudeSession ?? startClaudeSession
     this.checkSessionArtifactFn = args.checkSessionArtifact ?? checkSessionArtifact
     this.secretsService = args.secrets ?? null
+    this.getProviderDefaults = args.getProviderDefaults
   }
 
   /** Made on first use, so a coordinator that never sees a secret never touches a keychain. */
@@ -1743,16 +1751,31 @@ export class AgentCoordinator {
     return options.provider ?? currentProvider ?? "claude"
   }
 
+  /**
+   * Options missing for the turn's provider come from the user's saved
+   * defaults. A bare `effort` the caller named still wins over the saved one.
+   */
+  private withProviderDefaults(provider: AgentProvider, options: SendMessageOptions): SendMessageOptions {
+    if (options.modelOptions?.[provider]) return options
+    const saved = this.getProviderDefaults?.()[provider]?.modelOptions as Record<string, unknown> | undefined
+    if (!saved) return options
+    const { reasoningEffort: _, ...rest } = saved
+    const own = options.effort ? rest : saved
+    return { ...options, modelOptions: { ...options.modelOptions, [provider]: own } as ModelOptions }
+  }
+
   /** `chatId` names the chat whose live session a turn without options carries on. */
-  private getProviderSettings(provider: AgentProvider, options: SendMessageOptions, chatId?: string) {
+  private getProviderSettings(provider: AgentProvider, rawOptions: SendMessageOptions, chatId?: string) {
     const catalog = getServerProviderCatalog(provider)
+    // A turn nobody picked options for (a report, a message from another
+    // chat, a schedule) keeps the live session's effort and fast mode.
+    // Falling back to the defaults instead would restart a session that runs
+    // at another effort, and switch back on the user's next turn. Only with no
+    // live session do the saved Settings defaults fill in.
+    const live = provider !== "claude" || rawOptions.modelOptions?.claude || !chatId ? undefined : this.claudeSessions.get(chatId)
+    const options = live ? rawOptions : this.withProviderDefaults(provider, rawOptions)
     if (provider === "claude") {
       const model = normalizeServerModel(provider, options.model)
-      // A turn nobody picked options for (a report, a message from another
-      // chat, a schedule) keeps the live session's effort and fast mode.
-      // Falling back to the defaults instead would restart a session that runs
-      // at another effort, and switch back on the user's next turn.
-      const live = options.modelOptions?.claude || !chatId ? undefined : this.claudeSessions.get(chatId)
       const modelOptions = normalizeClaudeModelOptions(
         model,
         live ? { claude: { fastMode: live.serviceTier === "fast" } } : options.modelOptions,

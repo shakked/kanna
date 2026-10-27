@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ProviderUsageSnapshot, UsageLimitWindow, UsageLimitsSnapshot } from "../../shared/types"
-import { selectComposerUsage, shortUsageLabel } from "./composerUsage"
+import { formatResetCountdown, selectComposerUsage } from "./composerUsage"
 
 function makeWindow(id: string, label: string, usedPercent: number | null): UsageLimitWindow {
   return {
@@ -60,13 +60,20 @@ describe("selectComposerUsage", () => {
   })
 })
 
-describe("shortUsageLabel", () => {
-  test("shortens window labels for the composer row", () => {
-    expect(shortUsageLabel(makeWindow("five_hour", "Current session (5-hour)", 1))).toBe("5h")
-    expect(shortUsageLabel(makeWindow("seven_day", "Weekly · All models", 1))).toBe("Weekly")
-    expect(shortUsageLabel(makeWindow("seven_day_opus", "Weekly · Opus", 1))).toBe("Weekly Opus")
-    expect(shortUsageLabel(makeWindow("codex:primary", "5-hour · All models", 1))).toBe("5h")
-    expect(shortUsageLabel(makeWindow("spark:secondary", "Weekly · GPT 5.3 Codex Spark", 1))).toBe("Weekly")
-    expect(shortUsageLabel(makeWindow("codex:primary", "15-minute", 1))).toBe("15m")
+describe("formatResetCountdown", () => {
+  const now = Date.parse("2026-10-27T12:00:00.000Z")
+
+  test("counts down to the reset, rounded up to the minute", () => {
+    expect(formatResetCountdown("2026-10-27T14:14:00.000Z", now)).toBe("2h 14m")
+    expect(formatResetCountdown("2026-10-27T12:38:00.000Z", now)).toBe("38m")
+    expect(formatResetCountdown("2026-10-27T12:00:20.000Z", now)).toBe("1m")
+    expect(formatResetCountdown("2026-10-27T15:00:00.000Z", now)).toBe("3h")
+    expect(formatResetCountdown("2026-10-30T16:00:00.000Z", now)).toBe("3d 4h")
+  })
+
+  test("is null when the reset time is unknown or already past", () => {
+    expect(formatResetCountdown(null, now)).toBeNull()
+    expect(formatResetCountdown("not a date", now)).toBeNull()
+    expect(formatResetCountdown("2026-10-27T11:59:00.000Z", now)).toBeNull()
   })
 })

@@ -3,8 +3,6 @@ import type { AgentProvider, UsageLimitWindow, UsageLimitsSnapshot } from "../..
 
 export interface ComposerUsage {
   window: UsageLimitWindow
-  /** Short form for the composer row: "5h", "Weekly", "Weekly Opus". */
-  shortLabel: string
 }
 
 /** Model-specific Claude weekly windows and the model family each one limits. */
@@ -42,15 +40,21 @@ function windowsForModel(provider: AgentProvider, windows: UsageLimitWindow[], m
   return windows
 }
 
-/** "Current session (5-hour)" → "5h", "Weekly · Opus" → "Weekly Opus", "Weekly · All models" → "Weekly". */
-export function shortUsageLabel(window: UsageLimitWindow): string {
-  const [base, suffix] = window.label.split(" · ")
-  const span = /(\d+)-(minute|hour|day)/.exec(base)
-  const head = span ? `${span[1]}${span[2][0]}` : base.replace(/\s*\(.*\)$/, "")
-  const lane = suffix && !/^All (models|products)$/.test(suffix) && window.id.startsWith("seven_day_")
-    ? ` ${suffix}`
-    : ""
-  return `${head}${lane}`
+/**
+ * Time left until `resetsAt`, rounded up to the minute: "3d 4h", "2h 14m",
+ * "38m". Null when the time is unknown or already past.
+ */
+export function formatResetCountdown(resetsAt: string | null, now: number = Date.now()): string | null {
+  if (!resetsAt) return null
+  const ms = Date.parse(resetsAt) - now
+  if (!Number.isFinite(ms) || ms <= 0) return null
+  const totalMinutes = Math.ceil(ms / 60_000)
+  const days = Math.floor(totalMinutes / 1440)
+  const hours = Math.floor((totalMinutes % 1440) / 60)
+  const minutes = totalMinutes % 60
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`
+  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+  return `${minutes}m`
 }
 
 /**
@@ -70,5 +74,5 @@ export function selectComposerUsage(
   if (candidates.length === 0) return null
   const window = candidates.reduce((fullest, next) =>
     (next.usedPercent ?? 0) > (fullest.usedPercent ?? 0) ? next : fullest)
-  return { window, shortLabel: shortUsageLabel(window) }
+  return { window }
 }

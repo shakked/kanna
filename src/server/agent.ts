@@ -1325,6 +1325,12 @@ export class AgentCoordinator {
    */
   getChatStatuses() {
     const statuses = this.getActiveStatuses()
+    // A turn on its way (a queue drain, a resume, a steer's gap) is in flight
+    // to `list_chats` (`isBusy`), so the sidebar says so too rather than
+    // reading the chat as finished until the harness comes up.
+    for (const chatId of this.startingTurns.keys()) {
+      if (!statuses.has(chatId)) statuses.set(chatId, "starting")
+    }
     for (const [chatId, byId] of this.subagents) {
       if (statuses.has(chatId)) continue
       for (const activity of byId.values()) {
@@ -1911,6 +1917,11 @@ export class AgentCoordinator {
       this.unmarkStarting(chatId)
     }
     return true
+  }
+
+  /** Starts the chat's next queued message when nothing else will: see `startOrphanedQueues`. */
+  startNextQueuedMessage(chatId: string) {
+    return this.maybeStartNextQueuedMessage(chatId)
   }
 
   /**

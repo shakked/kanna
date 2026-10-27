@@ -41,6 +41,37 @@ describe("read models", () => {
     expect([...group.previewChats, ...group.olderChats].map((row) => row.chatId).sort()).toEqual(["listed-child", "parent"])
   })
 
+  test("a chat whose turn a shutdown cut short reads as starting until it is resumed", () => {
+    const state = createEmptyState()
+    const now = Date.now()
+    state.projectsById.set("p", { id: "p", localPath: "/tmp/p", title: "P", createdAt: 1, updatedAt: 1 })
+    state.chatsById.set("c", {
+      id: "c",
+      projectId: "p",
+      title: "c",
+      createdAt: now,
+      updatedAt: now,
+      unread: true,
+      provider: "codex",
+      planMode: false,
+      autoPlan: false,
+      sessionToken: "s",
+      hasMessages: true,
+      lastMessageAt: now,
+      // The turn before the one that was cut short finished.
+      lastTurnOutcome: "success",
+      resumePending: true,
+    })
+
+    const row = () => deriveSidebarData(state, new Map(), { nowMs: now }).projectGroups[0]!.chats[0]!
+    expect(row().status).toBe("starting")
+    // The resumed turn's own status takes over once it is up.
+    expect(deriveSidebarData(state, new Map([["c", "running"]]), { nowMs: now }).projectGroups[0]!.chats[0]!.status).toBe("running")
+
+    delete state.chatsById.get("c")!.resumePending
+    expect(row().status).toBe("idle")
+  })
+
   test("a chat waiting on a subagent reads so in the sidebar and its snapshot, unless its last turn failed", () => {
     const state = createEmptyState()
     state.projectsById.set("p", { id: "p", localPath: "/tmp/p", title: "P", createdAt: 1, updatedAt: 1 })

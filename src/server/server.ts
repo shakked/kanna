@@ -30,7 +30,7 @@ import { DiffStore } from "./diff-store"
 import { WorktreeProbe } from "./worktree-probe"
 import { TurnFileTracker } from "./worktree-snapshot"
 import { backfillTouchedFileBases } from "./touched-file-backfill"
-import { resumeInterruptedTurns } from "./resume-turns"
+import { resumeInterruptedTurns, startOrphanedQueues } from "./resume-turns"
 import { ChatOrchestrator } from "./orchestrator"
 import { createChatCommands } from "./chat-commands"
 import { discoverProjects, type DiscoveredProject } from "./discovery"
@@ -444,6 +444,21 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     .then(async (resumedChatIds) => {
       if (resumedChatIds.length > 0) {
         console.log(`${LOG_PREFIX} resumed ${resumedChatIds.length} chat(s) interrupted by the last shutdown`)
+        await router.broadcastSnapshots()
+      }
+    })
+    // After the resumes, which drain their own queues when they end: the rest
+    // lost the turn that would have drained theirs (see resume-turns.ts).
+    .then(() => startOrphanedQueues({
+      store,
+      agent,
+      onError: (chatId, error) => {
+        console.warn(`${LOG_PREFIX} could not start chat ${chatId}'s queued message after restart:`, error)
+      },
+    }))
+    .then(async (startedChatIds) => {
+      if (startedChatIds.length > 0) {
+        console.log(`${LOG_PREFIX} started the queues of ${startedChatIds.length} chat(s) the last shutdown left waiting`)
         await router.broadcastSnapshots()
       }
     })

@@ -3458,6 +3458,21 @@ describe("waiting on a subagent", () => {
     return new AgentCoordinator({ store: createFakeStore() as never, onStateChange: () => {} })
   }
 
+  test("a chat with a turn on its way reads as starting, not finished", () => {
+    const agent = coordinator()
+    // A queue drain, a resume or a steer's gap: `isBusy`, so `list_chats` says running.
+    const starts = agent as unknown as { markStarting(chatId: string): void; unmarkStarting(chatId: string): void }
+    agent.applySubagentActivity("chat-1", { kind: "started", id: "a1", type: "subagent", label: "explore" }, 1000)
+    starts.markStarting("chat-1")
+    expect(agent.isBusy("chat-1")).toBe(true)
+    expect(agent.getChatStatuses().get("chat-1")).toBe("starting")
+    // Not a turn yet: nothing to stop.
+    expect(agent.getActiveStatuses().has("chat-1")).toBe(false)
+
+    starts.unmarkStarting("chat-1")
+    expect(agent.getChatStatuses().get("chat-1")).toBe("waiting_on_subagent")
+  })
+
   test("a chat with no turn and a task still running is waiting on it", () => {
     const agent = coordinator()
     expect(agent.getChatStatuses().has("chat-1")).toBe(false)

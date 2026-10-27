@@ -38,6 +38,9 @@ export function deriveStatus(chat: ChatRecord, activeStatus?: KannaStatus): Kann
   // waiting is one they leave alone.
   if (activeStatus === "waiting_on_subagent" && chat.lastTurnOutcome === "failed") return "failed"
   if (activeStatus) return activeStatus
+  // Cut short by a shutdown and about to be picked back up: in flight to
+  // `list_chats`, so not finished here either.
+  if (chat.resumePending) return "starting"
   if (chat.lastTurnOutcome === "failed") return "failed"
   return "idle"
 }

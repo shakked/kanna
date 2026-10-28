@@ -215,6 +215,8 @@ interface ChatPreferenceControlsProps {
    */
   hideDefaults?: boolean
   className?: string
+  /** The controls' root, for callers that lay things out around the row. */
+  rootRef?: React.Ref<HTMLDivElement>
 }
 
 const MODE_ICONS: Record<ChatMode, typeof LockOpen> = {
@@ -240,6 +242,7 @@ export function ChatPreferenceControls({
   includeMode = true,
   hideDefaults = false,
   className,
+  rootRef,
 }: ChatPreferenceControlsProps) {
   const providerConfig = availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0]
   const unauthenticatedHarnesses = useUnauthenticatedHarnesses()
@@ -283,7 +286,7 @@ export function ChatPreferenceControls({
         : { type: "codexReasoningEffort", effort: effortId as CodexReasoningEffort }
 
   return (
-    <div className={cn("flex md:justify-center items-center gap-0.5", className)}>
+    <div ref={rootRef} className={cn("flex md:justify-center items-center gap-0.5", className)}>
       {showProviderPicker ? (
         <InputPopover
           disabled={providerLocked || !onProviderChange}

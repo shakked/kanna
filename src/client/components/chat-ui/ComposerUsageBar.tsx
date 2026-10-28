@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useState } from "react"
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { formatPercent, formatUntil } from "../../app/settings/UsageSection"
 import { openCommandPalette } from "../command-palette/CommandPalette"
-import { formatResetCountdown, windowAsOf, type ComposerUsageRow } from "../../lib/composerUsage"
+import { formatResetCountdown, pickUsageLayout, windowAsOf, type ComposerUsageRow } from "../../lib/composerUsage"
 import { formatRelativeTime } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
@@ -21,13 +21,54 @@ function useMinuteTick() {
   }, [])
 }
 
+const GRID_CLASS = "grid shrink-0 items-center gap-x-1.5 px-1 text-left text-[9px] font-medium leading-[9px]"
+const FULL_COLUMNS = "grid-cols-[auto_40px_auto_auto]"
+const COMPACT_COLUMNS = "grid-cols-[auto_40px_auto]"
+
+function UsageRows({ rows, showCountdown }: { rows: ComposerUsageRow[]; showCountdown: boolean }) {
+  return rows.map(({ window, shortLabel }) => {
+    const usedPercent = Math.max(0, Math.min(100, window.usedPercent ?? 0))
+    return (
+      <Fragment key={window.id}>
+        <span className="whitespace-nowrap">{shortLabel}</span>
+        <span className="h-[3px] overflow-hidden rounded-full bg-muted-foreground/20" aria-hidden="true">
+          <span
+            className={cn("block h-full rounded-full transition-[width] duration-500 ease-out", fillColorClass(usedPercent))}
+            style={{ width: `${usedPercent > 0 ? Math.max(4, usedPercent) : 0}%` }}
+          />
+        </span>
+        <span className="whitespace-nowrap text-right tabular-nums">{formatPercent(window.usedPercent)}</span>
+        {showCountdown ? (
+          <span className="whitespace-nowrap tabular-nums">{formatResetCountdown(window.resetsAt) ?? ""}</span>
+        ) : null}
+      </Fragment>
+    )
+  })
+}
+
 /**
  * The selected provider's plan usage beside the composer's options row: one
  * thin meter per window that limits the current model, shortest first
  * ("5h ▬▬ 42% 2h 14m" over "Wk ▬ 18% 3d 4h"), in the context dial's 9px
- * type, spread to the dial's 24px height. Full names on hover; opens the command palette's Usage page.
+ * type, spread to the dial's 24px height. Full names on hover; opens the
+ * command palette's Usage page.
+ *
+ * Given `room` (px free beside the centred controls), it drops the reset
+ * countdowns from every row when the whole stack won't fit, and reports
+ * `onFitChange(false)` when even that won't, so the caller can place it
+ * elsewhere rather than overlap the controls.
  */
-export function ComposerUsageBar({ rows: rawRows, className }: { rows: ComposerUsageRow[]; className?: string }) {
+export function ComposerUsageBar({
+  rows: rawRows,
+  className,
+  room = null,
+  onFitChange,
+}: {
+  rows: ComposerUsageRow[]
+  className?: string
+  room?: number | null
+  onFitChange?: (fits: boolean) => void
+}) {
   useMinuteTick()
   // Re-read each minute, so a window that resets mid-session drops to 0%.
   const rows = rawRows.map((row) => ({ ...row, window: windowAsOf(row.window) }))
@@ -35,6 +76,23 @@ export function ComposerUsageBar({ rows: rawRows, className }: { rows: ComposerU
     const countdown = formatResetCountdown(window.resetsAt)
     return `${window.label} ${formatPercent(window.usedPercent)} used${countdown ? `, resets in ${countdown}` : ""}`
   }).join("; ")
+
+  // Both widths come from invisible copies, so the choice never depends on
+  // which one is showing (no flip-flop as the countdown text changes).
+  const fullRef = useRef<HTMLSpanElement>(null)
+  const compactRef = useRef<HTMLSpanElement>(null)
+  const [widths, setWidths] = useState({ full: 0, compact: 0 })
+  useLayoutEffect(() => {
+    const full = fullRef.current?.offsetWidth ?? 0
+    const compact = compactRef.current?.offsetWidth ?? 0
+    if (full !== widths.full || compact !== widths.compact) setWidths({ full, compact })
+  })
+  // Unmeasured (display:none, below lg) counts as fitting.
+  const layout = widths.full === 0 ? "full" : pickUsageLayout(room, widths.full, widths.compact)
+  const fits = layout !== "none"
+  useEffect(() => {
+    onFitChange?.(fits)
+  }, [fits, onFitChange])
 
   return (
     <Tooltip delayDuration={0}>
@@ -44,29 +102,22 @@ export function ComposerUsageBar({ rows: rawRows, className }: { rows: ComposerU
           onClick={() => openCommandPalette("usage")}
           aria-label={`Plan usage: ${summary}. Open usage`}
           className={cn(
-            "grid min-h-6 shrink-0 cursor-pointer grid-cols-[auto_40px_auto_auto] items-center gap-x-1.5 rounded-md px-1 text-left text-[9px] font-medium leading-[9px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            GRID_CLASS,
+            layout === "full" ? FULL_COLUMNS : COMPACT_COLUMNS,
+            "relative min-h-6 cursor-pointer rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             // As tall as the context ring (24px): rows spread over it, a lone
             // row centred in it; three or more fill it on their own.
             rows.length > 1 ? "content-between" : "content-center",
             className,
           )}
         >
-          {rows.map(({ window, shortLabel }) => {
-            const usedPercent = Math.max(0, Math.min(100, window.usedPercent ?? 0))
-            return (
-              <Fragment key={window.id}>
-                <span className="whitespace-nowrap">{shortLabel}</span>
-                <span className="h-[3px] overflow-hidden rounded-full bg-muted-foreground/20" aria-hidden="true">
-                  <span
-                    className={cn("block h-full rounded-full transition-[width] duration-500 ease-out", fillColorClass(usedPercent))}
-                    style={{ width: `${usedPercent > 0 ? Math.max(4, usedPercent) : 0}%` }}
-                  />
-                </span>
-                <span className="whitespace-nowrap text-right tabular-nums">{formatPercent(window.usedPercent)}</span>
-                <span className="whitespace-nowrap tabular-nums">{formatResetCountdown(window.resetsAt) ?? ""}</span>
-              </Fragment>
-            )
-          })}
+          <UsageRows rows={rows} showCountdown={layout === "full"} />
+          {/* Measuring copies: zero-size and clipped, so they never add to
+              the row's scroll width. */}
+          <span aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 h-0 w-0 overflow-hidden">
+            <span ref={fullRef} className={cn(GRID_CLASS, FULL_COLUMNS, "w-max")}><UsageRows rows={rows} showCountdown /></span>
+            <span ref={compactRef} className={cn(GRID_CLASS, COMPACT_COLUMNS, "w-max")}><UsageRows rows={rows} showCountdown={false} /></span>
+          </span>
         </button>
       </TooltipTrigger>
       <TooltipContent side="top" align="start" className="w-max max-w-none px-3 py-2">

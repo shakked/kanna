@@ -117,3 +117,16 @@ export function selectComposerUsage(
     .map(({ window }) => ({ window, shortLabel: shortUsageLabel(window) }))
   return rows.length > 0 ? rows : null
 }
+
+export type ComposerUsageLayout = "full" | "compact" | "none"
+
+/**
+ * How the usage stack fits in `room` px: whole ("full"), without the reset
+ * countdowns ("compact", dropped from every row at once so the rows stay
+ * alike), or not at all. `room` null means unconstrained.
+ */
+export function pickUsageLayout(room: number | null, fullWidth: number, compactWidth: number): ComposerUsageLayout {
+  if (room === null || room >= fullWidth) return "full"
+  if (room >= compactWidth) return "compact"
+  return "none"
+}

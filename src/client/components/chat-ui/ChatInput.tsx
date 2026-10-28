@@ -355,6 +355,28 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     () => selectComposerUsage(usageLimits, providerPrefs.provider, providerPrefs.model),
     [usageLimits, providerPrefs.model, providerPrefs.provider],
   )
+  // Free px left of the centred controls, for the pinned usage bar. Worked out
+  // from widths (half of what the controls leave), not positions, so the bar
+  // falling back into the row can't move the controls and flip it back.
+  const controlsRowRef = useRef<HTMLDivElement>(null)
+  const preferenceControlsRef = useRef<HTMLDivElement>(null)
+  const [usageRoom, setUsageRoom] = useState<number | null>(null)
+  const [pinnedUsageFits, setPinnedUsageFits] = useState(true)
+  const hasComposerUsage = composerUsage !== null
+  useLayoutEffect(() => {
+    const row = controlsRowRef.current
+    const controls = preferenceControlsRef.current
+    if (!hasComposerUsage || !row || !controls || typeof ResizeObserver === "undefined") return
+    const measure = () => {
+      // left-[13px] inset, then 8px clear of the first control.
+      setUsageRoom(Math.floor((row.clientWidth - controls.scrollWidth) / 2) - 13 - 8)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(row)
+    observer.observe(controls)
+    return () => observer.disconnect()
+  }, [hasComposerUsage])
   // "/" skill menu derivations. The mention is non-null only while the caret
   // is inside a "/token" anywhere in the prompt ("$token" also opens it on
   // codex, whose native sigil is "$" — accepting still completes to the
@@ -1356,7 +1378,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
         controlsScrollSpacer), so the net gutter is unchanged but content can
         scroll under the edge.
       */}
-      <div className={cn("relative py-3 max-w-[840px] mx-auto", isStandalone && "pt-3 pb-5")}>
+      <div ref={controlsRowRef} className={cn("relative py-3 max-w-[840px] mx-auto", isStandalone && "pt-3 pb-5")}>
         <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-row">
           <div className={controlsScrollSpacer} />
           <label
@@ -1418,12 +1440,19 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             includeMode={showModePicker}
             hideDefaults
             className="max-w-[840px] mx-auto"
+            rootRef={preferenceControlsRef}
           />
           {/* Below lg the usage bar rides at the end of the row, beside the
               dial, so appearing never pushes the controls before it. From md
-              the dial is pinned over the row's right edge; mr-9 clears it. */}
+              the dial is pinned over the row's right edge; mr-9 clears it.
+              From lg it comes back here only when the pinned one can't fit
+              beside the controls (a narrow pane, e.g. with the delegator
+              sidebar open). */}
           {composerUsage ? (
-            <ComposerUsageBar rows={composerUsage} className="ml-2 self-center md:mr-9 lg:hidden" />
+            <ComposerUsageBar
+              rows={composerUsage}
+              className={cn("ml-2 self-center md:mr-9", pinnedUsageFits && "lg:hidden")}
+            />
           ) : null}
           {activeContextWindow ? (
             <div className="mx-[13px] flex items-center gap-2 md:hidden">
@@ -1439,9 +1468,11 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
         {composerUsage ? (
           <div className={cn(
             "absolute inset-y-0 left-[13px] hidden items-center lg:flex",
-            isStandalone ? "pt-3 pb-5" : "py-3"
+            isStandalone ? "pt-3 pb-5" : "py-3",
+            // Kept mounted while it doesn't fit, so it can tell when it does.
+            !pinnedUsageFits && "invisible",
           )}>
-            <ComposerUsageBar rows={composerUsage} />
+            <ComposerUsageBar rows={composerUsage} room={usageRoom} onFitChange={setPinnedUsageFits} />
           </div>
         ) : null}
 

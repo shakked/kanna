@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import { readFile } from "node:fs/promises"
 import { promisify } from "node:util"
 import type { ChatCpuSnapshot } from "../shared/types"
 
@@ -8,10 +9,17 @@ const execFileAsync = promisify(execFile)
 export const CHAT_CPU_INTERVAL_MS = 5_000
 
 /**
- * Below this a chat reports nothing. An idle agent process sits at a fraction
- * of a percent forever, and a number on every row would be noise.
+ * Set in each `claude` process's environment to a per-session token, so the
+ * monitor can tell which of the server's children belongs to which chat: the
+ * SDK does not expose the pid (see `readClaudeQueryPid`).
  */
-export const CHAT_CPU_MIN_PERCENT = 1
+export const KANNA_PROCESS_TAG_ENV = "KANNA_PROCESS_TAG"
+
+/** Live chats' agent processes: by pid where known, else by process tag. */
+export interface ChatProcesses {
+  pids: ReadonlyMap<string, number>
+  tags: ReadonlyMap<string, string>
+}
 
 export interface PsRow {
   pid: number
@@ -120,11 +128,13 @@ export function sumProcessTreeCpu(
   return totals
 }
 
-/** Whole percents, and only the chats at or over `CHAT_CPU_MIN_PERCENT`. */
+/**
+ * Whole percents for every chat with a live process. An idle one is 0, which
+ * the row shows dimmed as "<1%", so a live chat always shows the meter.
+ */
 export function toChatCpuSnapshot(totals: ReadonlyMap<string, number>): ChatCpuSnapshot {
   const chats: Record<string, number> = {}
   for (const [chatId, percent] of [...totals].sort(([a], [b]) => a.localeCompare(b))) {
-    if (percent < CHAT_CPU_MIN_PERCENT) continue
     chats[chatId] = Math.round(percent)
   }
   return { chats }
@@ -138,32 +148,84 @@ async function readPs(): Promise<string> {
   return stdout
 }
 
+const PROCESS_TAG_PATTERN = new RegExp(`(?:^|[\\s\\0])${KANNA_PROCESS_TAG_ENV}=([\\w-]+)`)
+
+/**
+ * Each pid's `KANNA_PROCESS_TAG`, or null when its environment has none.
+ * Pids that could not be read are left out, to be tried again next tick.
+ * macOS: one `ps -E` over all of them (the environment follows the command);
+ * Linux: `/proc/<pid>/environ`.
+ */
+async function readProcessTags(pids: readonly number[]): Promise<Map<number, string | null>> {
+  const tags = new Map<number, string | null>()
+  if (process.platform === "linux") {
+    await Promise.all(pids.map(async (pid) => {
+      try {
+        const environ = await readFile(`/proc/${pid}/environ`, "utf8")
+        tags.set(pid, PROCESS_TAG_PATTERN.exec(environ)?.[1] ?? null)
+      } catch {
+        // Exited, or not ours to read.
+      }
+    }))
+    return tags
+  }
+  let stdout: string
+  try {
+    ;({ stdout } = await execFileAsync("ps", ["-E", "-ww", "-o", "pid=,command=", "-p", pids.join(",")], {
+      timeout: 3_000,
+      maxBuffer: 16 * 1024 * 1024,
+    }))
+  } catch (error) {
+    // `ps` exits 1 when one of the pids has gone, but still lists the rest.
+    stdout = (error as { stdout?: string }).stdout ?? ""
+  }
+  for (const line of stdout.split("\n")) {
+    const pid = /^\s*(\d+)\s/.exec(line)?.[1]
+    if (pid) tags.set(Number(pid), PROCESS_TAG_PATTERN.exec(line)?.[1] ?? null)
+  }
+  return tags
+}
+
 /**
  * Samples each chat's CPU (its agent process plus descendants) every
  * `CHAT_CPU_INTERVAL_MS`, but only while `setActive(true)`: the router turns
  * it on while some client holds a `chat-cpu` subscription. One `ps` call per
  * tick covers every chat, and a tick with no live chat process skips `ps`.
+ *
+ * A chat comes with its process's pid (Codex) or with the tag its process
+ * carries (Claude). A tag is matched against the server's direct children:
+ * each new child's environment is read once (one more `ps`, only on a tick
+ * where a child has appeared) and remembered until the pid goes away.
  */
 export class ChatCpuMonitor {
-  private readonly getChatPids: () => ReadonlyMap<string, number>
+  private readonly getChatProcesses: () => ChatProcesses
   private readonly read: () => Promise<string>
+  private readonly readTags: (pids: readonly number[]) => Promise<Map<number, string | null>>
+  private readonly parentPid: number
   private readonly intervalMs: number
   private readonly now: () => number
   private timer: ReturnType<typeof setInterval> | null = null
   private sampling = false
   private previous: { cpuSecondsByPid: Map<number, number>; at: number } | null = null
+  /** The server's children whose environment was read: their tag, or null. */
+  private readonly tagByPid = new Map<number, string | null>()
   private snapshot: ChatCpuSnapshot = { chats: {} }
   private signature = "{}"
   private readonly listeners = new Set<() => void>()
 
   constructor(args: {
-    getChatPids: () => ReadonlyMap<string, number>
+    getChatProcesses: () => ChatProcesses
     readPs?: () => Promise<string>
+    readProcessTags?: (pids: readonly number[]) => Promise<Map<number, string | null>>
+    /** Whose children carry the tags. Default: this process. */
+    parentPid?: number
     intervalMs?: number
     now?: () => number
   }) {
-    this.getChatPids = args.getChatPids
+    this.getChatProcesses = args.getChatProcesses
     this.read = args.readPs ?? readPs
+    this.readTags = args.readProcessTags ?? readProcessTags
+    this.parentPid = args.parentPid ?? process.pid
     this.intervalMs = args.intervalMs ?? CHAT_CPU_INTERVAL_MS
     this.now = args.now ?? Date.now
   }
@@ -202,8 +264,8 @@ export class ChatCpuMonitor {
     if (this.sampling) return
     this.sampling = true
     try {
-      const roots = this.getChatPids()
-      if (roots.size === 0) {
+      const { pids, tags } = this.getChatProcesses()
+      if (pids.size === 0 && tags.size === 0) {
         this.previous = null
         this.publish({ chats: {} })
         return
@@ -221,9 +283,32 @@ export class ChatCpuMonitor {
         this.previous ? { cpuSecondsByPid: this.previous.cpuSecondsByPid, elapsedMs: at - this.previous.at } : null,
       )
       this.previous = { cpuSecondsByPid: new Map(rows.map((row) => [row.pid, row.cpuSeconds])), at }
+      const roots = new Map(pids)
+      if (tags.size > 0) await this.resolveTags(rows, tags, roots)
       this.publish(toChatCpuSnapshot(sumProcessTreeCpu(rows, percents, roots)))
     } finally {
       this.sampling = false
+    }
+  }
+
+  /** Adds to `roots` the pid of each tagged chat's process, where found. */
+  private async resolveTags(rows: readonly PsRow[], tags: ReadonlyMap<string, string>, roots: Map<string, number>) {
+    const children = new Set<number>()
+    for (const row of rows) if (row.ppid === this.parentPid) children.add(row.pid)
+    for (const pid of this.tagByPid.keys()) if (!children.has(pid)) this.tagByPid.delete(pid)
+    const unread = [...children].filter((pid) => !this.tagByPid.has(pid))
+    if (unread.length > 0) {
+      try {
+        for (const [pid, tag] of await this.readTags(unread)) this.tagByPid.set(pid, tag)
+      } catch {
+        // Tried again next tick.
+      }
+    }
+    const pidByTag = new Map<string, number>()
+    for (const [pid, tag] of this.tagByPid) if (tag) pidByTag.set(tag, pid)
+    for (const [chatId, tag] of tags) {
+      const pid = pidByTag.get(tag)
+      if (pid !== undefined && !roots.has(chatId)) roots.set(chatId, pid)
     }
   }
 

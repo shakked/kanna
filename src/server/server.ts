@@ -315,7 +315,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   agent.setClaudeRateLimitListener((info) => usageLimits.recordClaudeRateLimitPush(info))
   codexManager.setRateLimitsListener((snapshot) => usageLimits.recordCodexRateLimitPush(snapshot))
   // Idle until a client subscribes to `chat-cpu`; the router switches it.
-  const chatCpu = new ChatCpuMonitor({ getChatPids: () => agent.getChatProcessPids() })
+  const chatCpu = new ChatCpuMonitor({ getChatProcesses: () => agent.getChatProcesses() })
 
   const providerAuth = new ProviderAuthManager({
     ...createProcessAuthDeps(),

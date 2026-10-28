@@ -138,15 +138,15 @@ export function machineCores(): number {
 /**
  * Every chat with a live process, as a share of the whole machine: the
  * per-core total (where 100 is one core) over `cores`, so all of it busy is
- * 100. One decimal under 10, whole above. Under 1 is sent as 0, which the row
- * shows as a dimmed "<1%", so a live chat always shows the meter, and an idle
- * chat's flicker below 1% pushes nothing.
+ * 100. One decimal under 10, whole above. Under 1 keeps its decimal too (a
+ * row shows it as a dimmed "<1%"), so a delegator's total over many quiet
+ * sub-chats still adds up on the client.
  */
 export function toChatCpuSnapshot(totals: ReadonlyMap<string, number>, cores: number): ChatCpuSnapshot {
   const chats: Record<string, number> = {}
   for (const [chatId, perCore] of [...totals].sort(([a], [b]) => a.localeCompare(b))) {
     const share = Math.min(100, perCore / cores)
-    chats[chatId] = share < 1 ? 0 : share < 10 ? Math.round(share * 10) / 10 : Math.round(share)
+    chats[chatId] = share < 10 ? Math.round(share * 10) / 10 : Math.round(share)
   }
   return { chats, cores }
 }

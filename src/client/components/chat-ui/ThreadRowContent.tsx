@@ -174,7 +174,9 @@ export function ThreadRowContent({
   // opted out of receding entirely.
   const needsAttention = thread.row.status !== "idle" || thread.row.unread
   const dimTitle = dimIdleTitles && !isActive && !hasUncommittedWork && !needsAttention
-  const cpu = cpuPercent != null && !thread.archived ? <ChatCpuMeter percent={cpuPercent} /> : null
+  const cpu = cpuPercent != null && !thread.archived
+    ? <ChatCpuMeter percent={cpuPercent} chatId={thread.chatId} />
+    : null
   return (
     <>
       {statusDot ?? (showProjectIcon && !showsDraft && !isMarkedDelegator

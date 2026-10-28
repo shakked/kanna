@@ -358,6 +358,11 @@ function normalizeVersion(version: string) {
     .filter((part) => Number.isFinite(part))
 }
 
+/** Version strings stamped by local fork builds ("0.86.0-local.abc1234"). */
+export function isLocalBuildVersion(version: string) {
+  return version.includes("-local.")
+}
+
 async function maybeSelfUpdate(_argv: string[], deps: CliRuntimeDeps) {
   if (process.env.KANNA_DISABLE_SELF_UPDATE === "1") {
     return null
@@ -378,6 +383,14 @@ async function maybeSelfUpdate(_argv: string[], deps: CliRuntimeDeps) {
   }
 
   if (!latestVersion || compareVersions(deps.version, latestVersion) >= 0) {
+    return null
+  }
+
+  // A local fork build ("0.86.0-local.<sha>") is never replaced on its own:
+  // the release would overwrite the fork on the next start or SIGUSR2 reload.
+  // The UpdateManager still reports the release, and Update installs it.
+  if (isLocalBuildVersion(deps.version)) {
+    deps.log(`${LOG_PREFIX} ${PACKAGE_NAME}@${latestVersion} is available; local build ${deps.version}, not installing`)
     return null
   }
 

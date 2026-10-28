@@ -248,6 +248,25 @@ interface ClaudeSessionHandle {
   setFastMode?: (fastMode: boolean) => Promise<void>
   supportedModels?: () => Promise<ClaudeSdkModelInfo[]>
   supportedCommands?: () => Promise<SlashCommand[]>
+  /** The `claude` process's pid while it runs; null when unknown or exited. */
+  getPid?: () => number | null
+}
+
+/**
+ * The pid of the `claude` process behind a query. The SDK does not expose it,
+ * so this reads the query's transport, which holds the ChildProcess it
+ * spawned (SDK 0.3.x: `query.transport.process`). Taking over the spawn with
+ * `spawnClaudeCodeProcess` would hand us the pid officially, but the SDK then
+ * skips its own stderr capture, which is what its exit errors quote. Any
+ * change to that shape reads as null: the chat shows no CPU, nothing breaks.
+ */
+export function readClaudeQueryPid(q: unknown): number | null {
+  const child = (q as { transport?: { process?: { pid?: unknown; exitCode?: unknown; signalCode?: unknown } } } | null)
+    ?.transport?.process
+  if (!child || typeof child.pid !== "number") return null
+  if (child.exitCode !== null && child.exitCode !== undefined) return null
+  if (child.signalCode !== null && child.signalCode !== undefined) return null
+  return child.pid
 }
 
 interface ClaudeSessionState {
@@ -1126,6 +1145,7 @@ async function startClaudeSession(args: {
     },
     supportedModels: async () => await q.supportedModels(),
     supportedCommands: async () => commandsRef.current ?? await q.supportedCommands(),
+    getPid: () => readClaudeQueryPid(q),
     close: () => {
       promptQueueClosed = true
       promptQueue.finish()
@@ -1286,6 +1306,24 @@ export class AgentCoordinator {
 
   getCodexManager() {
     return this.codexManager
+  }
+
+  /**
+   * The pid of each chat's own agent process, for the per-chat CPU readout:
+   * Claude's `claude` and Codex's `codex app-server` (one per chat session,
+   * spawned in `CodexAppServerManager.startSession`). Cursor, Grok and Pi are
+   * not listed, so their chats show no CPU.
+   */
+  getChatProcessPids(): Map<string, number> {
+    const pids = new Map<string, number>()
+    for (const [chatId, state] of this.claudeSessions) {
+      const pid = state.session.getPid?.()
+      if (pid) pids.set(chatId, pid)
+    }
+    for (const [chatId, pid] of this.codexManager.getSessionPids?.() ?? []) {
+      if (!pids.has(chatId)) pids.set(chatId, pid)
+    }
+    return pids
   }
 
   getResourceCounts() {

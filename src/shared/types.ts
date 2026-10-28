@@ -1538,6 +1538,16 @@ export interface UsageLimitsSnapshot {
   providers: ProviderUsageSnapshot[]
 }
 
+/**
+ * Each chat's CPU over the last sample interval (~5s): its agent process plus
+ * every descendant, in whole percent of one core (so it can pass 100). Only
+ * chats at 1% or more are listed; a chat with no live process, or one too
+ * quiet to matter, is absent.
+ */
+export interface ChatCpuSnapshot {
+  chats: Record<string, number>
+}
+
 // ---------------------------------------------------------------------------
 // Provider auth: installed/version/signed-in state + headless login flows for
 // the coding-agent CLIs (claude, codex, cursor-agent), gh, and OpenRouter.

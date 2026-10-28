@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process"
 import { readFile } from "node:fs/promises"
+import { availableParallelism, cpus } from "node:os"
 import { promisify } from "node:util"
 import type { ChatCpuSnapshot } from "../shared/types"
 
@@ -128,16 +129,26 @@ export function sumProcessTreeCpu(
   return totals
 }
 
+/** Logical cores, which a machine-wide share is taken over. */
+export function machineCores(): number {
+  const cores = typeof availableParallelism === "function" ? availableParallelism() : cpus().length
+  return Math.max(1, cores)
+}
+
 /**
- * Whole percents for every chat with a live process. An idle one is 0, which
- * the row shows dimmed as "<1%", so a live chat always shows the meter.
+ * Every chat with a live process, as a share of the whole machine: the
+ * per-core total (where 100 is one core) over `cores`, so all of it busy is
+ * 100. One decimal under 10, whole above. Under 1 is sent as 0, which the row
+ * shows as a dimmed "<1%", so a live chat always shows the meter, and an idle
+ * chat's flicker below 1% pushes nothing.
  */
-export function toChatCpuSnapshot(totals: ReadonlyMap<string, number>): ChatCpuSnapshot {
+export function toChatCpuSnapshot(totals: ReadonlyMap<string, number>, cores: number): ChatCpuSnapshot {
   const chats: Record<string, number> = {}
-  for (const [chatId, percent] of [...totals].sort(([a], [b]) => a.localeCompare(b))) {
-    chats[chatId] = Math.round(percent)
+  for (const [chatId, perCore] of [...totals].sort(([a], [b]) => a.localeCompare(b))) {
+    const share = Math.min(100, perCore / cores)
+    chats[chatId] = share < 1 ? 0 : share < 10 ? Math.round(share * 10) / 10 : Math.round(share)
   }
-  return { chats }
+  return { chats, cores }
 }
 
 async function readPs(): Promise<string> {
@@ -209,7 +220,8 @@ export class ChatCpuMonitor {
   private previous: { cpuSecondsByPid: Map<number, number>; at: number } | null = null
   /** The server's children whose environment was read: their tag, or null. */
   private readonly tagByPid = new Map<number, string | null>()
-  private snapshot: ChatCpuSnapshot = { chats: {} }
+  private readonly cores = machineCores()
+  private snapshot: ChatCpuSnapshot = { chats: {}, cores: this.cores }
   private signature = "{}"
   private readonly listeners = new Set<() => void>()
 
@@ -267,7 +279,7 @@ export class ChatCpuMonitor {
       const { pids, tags } = this.getChatProcesses()
       if (pids.size === 0 && tags.size === 0) {
         this.previous = null
-        this.publish({ chats: {} })
+        this.publish({ chats: {}, cores: this.cores })
         return
       }
       let stdout: string
@@ -285,7 +297,7 @@ export class ChatCpuMonitor {
       this.previous = { cpuSecondsByPid: new Map(rows.map((row) => [row.pid, row.cpuSeconds])), at }
       const roots = new Map(pids)
       if (tags.size > 0) await this.resolveTags(rows, tags, roots)
-      this.publish(toChatCpuSnapshot(sumProcessTreeCpu(rows, percents, roots)))
+      this.publish(toChatCpuSnapshot(sumProcessTreeCpu(rows, percents, roots), this.cores))
     } finally {
       this.sampling = false
     }

@@ -2,8 +2,10 @@ import { create } from "zustand"
 import type { ChatCpuSnapshot } from "../../shared/types"
 
 interface ChatCpuStore {
-  /** Whole percent of one core by chat id; absent means nothing to show. */
+  /** Share of the whole machine (0–100) by chat id; absent means nothing to show. */
   chats: Record<string, number>
+  /** Logical cores the share is taken over; null until the first push. */
+  cores: number | null
   setSnapshot: (snapshot: ChatCpuSnapshot) => void
   clear: () => void
 }
@@ -15,10 +17,15 @@ interface ChatCpuStore {
  */
 export const useChatCpuStore = create<ChatCpuStore>((set) => ({
   chats: {},
-  setSnapshot: (snapshot) => set({ chats: snapshot.chats }),
+  cores: null,
+  setSnapshot: (snapshot) => set({ chats: snapshot.chats, cores: snapshot.cores ?? null }),
   clear: () => set({ chats: {} }),
 }))
 
 export function useChatCpu(chatId: string): number | null {
   return useChatCpuStore((store) => store.chats[chatId] ?? null)
+}
+
+export function useChatCpuCores(): number | null {
+  return useChatCpuStore((store) => store.cores)
 }

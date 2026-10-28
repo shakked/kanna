@@ -607,7 +607,7 @@ export function createWsRouter({
         id,
         snapshot: {
           type: "chat-cpu",
-          data: chatCpu?.getSnapshot() ?? { chats: {} },
+          data: chatCpu?.getSnapshot() ?? { chats: {}, cores: 1 },
         },
       }
     }

@@ -1555,12 +1555,14 @@ export interface UsageLimitsSnapshot {
 
 /**
  * Each chat's CPU over the last sample interval (~5s): its agent process plus
- * every descendant, in whole percent of one core (so it can pass 100). Only
- * chats at 1% or more are listed; a chat with no live process, or one too
- * quiet to matter, is absent.
+ * every descendant, as a share of the whole machine (0–100, all `cores`
+ * together). One decimal under 10, whole above; under 1 it is sent as 0, which
+ * the row shows as a dimmed "<1%". A chat with no live process is absent.
  */
 export interface ChatCpuSnapshot {
   chats: Record<string, number>
+  /** Logical cores the share is taken over. */
+  cores: number
 }
 
 // ---------------------------------------------------------------------------

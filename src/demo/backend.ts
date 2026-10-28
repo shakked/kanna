@@ -810,7 +810,7 @@ export class DemoBackend {
       case "usage-limits":
         return { type: "usage-limits", data: { providers: [] } }
       case "chat-cpu":
-        return { type: "chat-cpu", data: { chats: {} } }
+        return { type: "chat-cpu", data: { chats: {}, cores: 1 } }
       case "terminal":
         return null
     }

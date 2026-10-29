@@ -30,6 +30,9 @@ interface ChatInputDockProps {
   /** See `ChatInput`: the previewed chat's composer passes both. */
   placeholder?: string
   secondary?: boolean
+  /** See `ChatInput`: ⌘/Ctrl+Enter on an empty composer sends this one now. */
+  oldestQueuedMessageId: string | null
+  onSendQueuedNow: (queuedMessageId: string) => Promise<void>
 }
 
 export const ChatInputDock = memo(function ChatInputDock({
@@ -56,6 +59,8 @@ export const ChatInputDock = memo(function ChatInputDock({
   onListSkills,
   placeholder,
   secondary,
+  oldestQueuedMessageId,
+  onSendQueuedNow,
 }: ChatInputDockProps) {
   return (
     <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none">
@@ -93,6 +98,8 @@ export const ChatInputDock = memo(function ChatInputDock({
             onListSkills={onListSkills}
             placeholder={placeholder}
             secondary={secondary}
+            oldestQueuedMessageId={oldestQueuedMessageId}
+            onSendQueuedNow={onSendQueuedNow}
           />
         </div>
       </div>

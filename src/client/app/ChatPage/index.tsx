@@ -64,6 +64,7 @@ import { useChatPageSidebarActions, EMPTY_DIFF_SNAPSHOT } from "./useChatPageSid
 import { useTranscriptJumpRequest } from "./useTranscriptJumpRequest"
 import { useUsageLimitsSnapshot } from "../../hooks/useUsageLimitsSnapshot"
 import { useTranscriptPaddingBottom } from "./useTranscriptPaddingBottom"
+import { countCascadingSubchats } from "../../../shared/stop-turn"
 import {
   EMPTY_STATE_TEXT,
   EMPTY_STATE_TYPING_INTERVAL_MS,
@@ -576,6 +577,7 @@ export function ChatPage() {
     chatId: string | null
     snapshot: ReturnType<typeof deriveLatestContextWindowSnapshot>
   } | null>(null)
+  const cascadingSubchats = countCascadingSubchats(state.runtime?.subagents)
   const contextWindowSnapshot = useMemo(() => {
     const previous = baseContextWindowSnapshotRef.current
     const nextSnapshot = holdContextWindowSnapshot(
@@ -952,8 +954,8 @@ export function ChatPage() {
     })
   }, [])
 
-  const handleCancel = useCallback(() => {
-    void state.handleCancel()
+  const handleCancel = useCallback((options?: { cascade?: boolean }) => {
+    void state.handleCancel(options)
   }, [state.handleCancel])
 
   const handleOpenExternal = useCallback<NonNullable<ComponentProps<typeof ChatNavbar>["onOpenExternal"]>>((action, editor) => {
@@ -1351,6 +1353,7 @@ export function ChatPage() {
           isProcessing={state.isProcessing}
           runtimeStatus={state.runtimeStatus}
           waitingOn={state.runtime?.waitingOn}
+          queuePaused={Boolean(state.runtime?.queuePaused)}
           isDraining={state.isDraining}
           commandError={state.commandError}
           onStopDraining={state.handleStopDraining}
@@ -1399,6 +1402,7 @@ export function ChatPage() {
         hasSelectedProject={state.hasSelectedProject}
         runtimeStatus={state.runtimeStatus}
         canCancel={state.canCancel}
+        cascadingSubchats={cascadingSubchats}
         projectId={projectId}
         projectPath={state.navbarLocalPath ?? null}
         projectRepoLabel={state.navbarRepoLabel}

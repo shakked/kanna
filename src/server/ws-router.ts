@@ -2010,7 +2010,7 @@ export function createWsRouter({
           return
         }
         case "chat.cancel": {
-          await finishChatCommand(ws, id, await chatCommands.cancel(command.chatId))
+          await finishChatCommand(ws, id, await chatCommands.cancel(command.chatId, { cascade: command.cascade }))
           return
         }
         case "chat.stopDraining": {

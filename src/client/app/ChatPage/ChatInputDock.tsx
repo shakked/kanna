@@ -14,6 +14,8 @@ interface ChatInputDockProps {
   hasSelectedProject: boolean
   runtimeStatus: string | null
   canCancel: boolean
+  /** Running sub-chats a stop could take with it. See `countCascadingSubchats`. */
+  cascadingSubchats?: number
   projectId: string | null
   projectPath: string | null
   projectRepoLabel: string | null
@@ -22,7 +24,7 @@ interface ChatInputDockProps {
   contextWindowSnapshot: ContextWindowSnapshot | null
   usageLimits?: UsageLimitsSnapshot | null
   onSubmit: KannaState["handleSend"]
-  onCancel: () => void
+  onCancel: (options?: { cascade?: boolean }) => void
   onEditModels: () => void
   onListSkills?: (provider: AgentProvider) => Promise<ChatSkillsSnapshot>
   /** See `ChatInput`: the previewed chat's composer passes both. */
@@ -40,6 +42,7 @@ export const ChatInputDock = memo(function ChatInputDock({
   hasSelectedProject,
   runtimeStatus,
   canCancel,
+  cascadingSubchats,
   projectId,
   projectPath,
   projectRepoLabel,
@@ -76,6 +79,7 @@ export const ChatInputDock = memo(function ChatInputDock({
             onCancel={onCancel}
             disabled={!hasSelectedProject}
             canCancel={canCancel}
+            cascadingSubchats={cascadingSubchats}
             chatId={activeChatId}
             projectId={projectId}
             projectPath={projectPath}

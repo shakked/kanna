@@ -1,5 +1,6 @@
 import { memo, type HTMLAttributes, type ReactNode, type Ref } from "react"
 import { Archive, RotateCcw, Split } from "lucide-react"
+import { delegatorToggleTitle } from "../../../lib/delegators"
 import { getThreadDetailLabel, type ThreadDetailScope } from "../../../lib/thread-detail-label"
 import type { SidebarThread } from "../../../lib/thread-sections"
 import { cn, normalizeChatId } from "../../../lib/utils"
@@ -37,8 +38,6 @@ interface ThreadRowProps {
   dimIdleTitles?: boolean
   /** See `ThreadRowContent`. */
   showProjectIcon?: boolean
-  /** See `ThreadRowContent`. */
-  delegatorMark?: boolean
   onSelect: (chatId: string) => void
   onCreateChat: (projectId: string) => void
   onRenameChat: (chat: SidebarThread["row"]) => void
@@ -55,7 +54,7 @@ interface ThreadRowProps {
 type ThreadRowBodyProps = Pick<
   ThreadRowProps,
   | "thread" | "isActive" | "archived" | "detailScope" | "nowMs" | "detailLabelOverride"
-  | "dimIdleTitles" | "showProjectIcon" | "delegatorMark" | "onSelect" | "onForkChat" | "onArchiveChat" | "onRestoreChat"
+  | "dimIdleTitles" | "showProjectIcon" | "onSelect" | "onForkChat" | "onArchiveChat" | "onRestoreChat"
 > & Omit<HTMLAttributes<HTMLDivElement>, "onSelect"> & { ref?: Ref<HTMLDivElement> }
 
 /**
@@ -79,7 +78,6 @@ export function ThreadRowBody({
   detailLabelOverride,
   dimIdleTitles = true,
   showProjectIcon = false,
-  delegatorMark,
   onSelect,
   onForkChat,
   onArchiveChat,
@@ -170,7 +168,6 @@ export function ThreadRowBody({
         dimIdleTitles={dimIdleTitles}
         hasDraft={hasDraft}
         showProjectIcon={showProjectIcon}
-        delegatorMark={delegatorMark}
         detailLabel={detailLabel}
         hoverActions={hoverActions}
         cpuPercent={archived ? null : cpuPercent}
@@ -206,7 +203,6 @@ function ThreadRowImpl({
   detailLabelOverride,
   dimIdleTitles = true,
   showProjectIcon = false,
-  delegatorMark,
   onSelect,
   onCreateChat,
   onRenameChat,
@@ -244,7 +240,6 @@ function ThreadRowImpl({
         detailLabelOverride={detailLabelOverride}
         dimIdleTitles={dimIdleTitles}
         showProjectIcon={showProjectIcon}
-        delegatorMark={delegatorMark}
         onSelect={onSelect}
         onForkChat={onForkChat}
         onArchiveChat={onArchiveChat}
@@ -292,16 +287,13 @@ export function ThreadRowMenu({
   const hasDraft = useChatHasDraft(thread.row.chatId)
   const clearDraft = useChatInputStore((state) => state.clearDraft)
   const commands = useChatMenuCommands()
-  const delegator = Boolean(thread.row.delegator)
-  // Grok chats are not given the chat tools, so one cannot delegate. One
-  // that already is a delegator can still be made ordinary again.
-  const canToggleDelegator = commands !== null && !archived && (delegator || thread.row.provider !== "grok")
+  const toggleTitle = commands !== null && !archived ? delegatorToggleTitle(thread.row) : null
 
   return (
     <ChatRowMenu
       leadingItems={leadingItems}
-      delegator={delegator}
-      onToggleDelegator={canToggleDelegator ? () => commands.setDelegator(thread.row.chatId, !delegator) : undefined}
+      delegatorToggleTitle={toggleTitle ?? undefined}
+      onToggleDelegator={toggleTitle ? () => commands!.setDelegator(thread.row.chatId, !thread.row.delegator) : undefined}
       canFork={thread.row.canFork}
       archived={archived}
       pinned={Boolean(thread.row.pinnedAt)}

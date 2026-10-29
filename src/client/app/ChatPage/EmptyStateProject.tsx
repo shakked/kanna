@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { ChevronDown, Search } from "lucide-react"
 import { scorePaletteItem } from "../../components/command-palette/actions"
 import { openCommandPalette } from "../../components/command-palette/CommandPalette"
-import { DELEGATORS_GROUP_KEY, getProjectChatGroups, type ProjectChatGroup } from "../../components/command-palette/ProjectChatSections"
+import { getProjectChatGroups, type ProjectChatGroup } from "../../components/command-palette/ProjectChatSections"
 import { ThreadRowContent } from "../../components/chat-ui/ThreadRowContent"
 import { ROW_HOVER_CLASS, WidgetListLabel } from "../../components/chat-ui/widgets/parts"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip"
@@ -211,8 +211,6 @@ export function EmptyStateProjectChats({ projectId, activeChatId, cascadeIn = fa
                 thread={thread}
                 nowMs={nowMs}
                 onSelect={openThread}
-                // Search results are one flat group, with no heading to say it.
-                delegatorMark={chatGroup.key !== DELEGATORS_GROUP_KEY}
               />
             ))}
           </Fragment>
@@ -226,12 +224,10 @@ export function EmptyStateProjectChats({ projectId, activeChatId, cascadeIn = fa
  * A widget row's box (1px border, 5px padding) around the palette's row
  * content: status, title, prompt preview, age.
  */
-function ProjectChatRow({ thread, nowMs, onSelect, delegatorMark }: {
+function ProjectChatRow({ thread, nowMs, onSelect }: {
   thread: SidebarThread
   nowMs: number
   onSelect: (thread: SidebarThread) => void
-  /** See `ThreadRowContent`. */
-  delegatorMark: boolean
 }) {
   const hasDraft = useChatHasDraft(thread.chatId)
   const cpuPercent = useChatCpu(thread.row.chatId)
@@ -247,7 +243,6 @@ function ProjectChatRow({ thread, nowMs, onSelect, delegatorMark }: {
         showPreview
         dimIdleTitles={false}
         hasDraft={hasDraft}
-        delegatorMark={delegatorMark}
         detailLabel={getThreadDetailLabel(thread, "project-scoped", nowMs)}
         cpuPercent={cpuPercent}
       />

@@ -1,22 +1,36 @@
-import { deriveModelLabel } from "../../shared/types"
+import { DEFAULT_USAGE_RESET_DAY, deriveModelLabel } from "../../shared/types"
 import type { AgentProvider, UsageLimitCredits, UsageLimitWindow, UsageLimitsSnapshot } from "../../shared/types"
 
 export interface ComposerUsageRow {
   window: UsageLimitWindow
   /**
    * A row label just long enough to tell the stack apart: "5h", "Wk", "Opus".
-   * Empty on the spend-cap row, which needs none.
+   * Empty on the spend-cap row, whose left cell is its reset countdown.
    */
   shortLabel: string
   /** Set on the spend-cap row: `window` is then the cap's percent, with no reset. */
   credits?: UsageLimitCredits
+  /**
+   * The spend cap's next reset, ISO 8601: assumed from the monthly reset day
+   * setting, since the usage API reports none. Kept off `window.resetsAt`, so
+   * it never zeroes the percent when the assumed day passes.
+   */
+  assumedResetsAt?: string
+}
+
+/** The next time the local clock reads midnight on `day` of a month, after `now`. */
+export function nextMonthlyReset(day: number, now: number = Date.now()): string {
+  const today = new Date(now)
+  const thisMonth = new Date(today.getFullYear(), today.getMonth(), day)
+  const next = thisMonth.getTime() > now ? thisMonth : new Date(today.getFullYear(), today.getMonth() + 1, day)
+  return next.toISOString()
 }
 
 /**
  * A spend cap (Claude Enterprise extra usage) as a meter row, for plans that
  * report no time windows. Null when the cap has no percent to draw.
  */
-function creditsRow(provider: AgentProvider, credits: UsageLimitCredits | null): ComposerUsageRow | null {
+function creditsRow(provider: AgentProvider, credits: UsageLimitCredits | null, resetDay: number, now: number): ComposerUsageRow | null {
   if (!credits || credits.usedPercent === null) return null
   return {
     window: {
@@ -30,6 +44,7 @@ function creditsRow(provider: AgentProvider, credits: UsageLimitCredits | null):
     },
     shortLabel: "",
     credits,
+    ...(provider === "claude" ? { assumedResetsAt: nextMonthlyReset(resetDay, now) } : {}),
   }
 }
 
@@ -133,6 +148,7 @@ export function selectComposerUsage(
   provider: AgentProvider,
   model: string | null,
   now: number = Date.now(),
+  usageResetDay: number = DEFAULT_USAGE_RESET_DAY,
 ): ComposerUsageRow[] | null {
   const providerSnapshot = snapshot?.providers.find((entry) => entry.provider === provider)
   if (!providerSnapshot || providerSnapshot.status !== "ok") return null
@@ -143,7 +159,7 @@ export function selectComposerUsage(
     .sort((a, b) => a.minutes - b.minutes || a.index - b.index)
     .map(({ window }) => ({ window, shortLabel: shortUsageLabel(window) }))
   if (rows.length > 0) return rows
-  const spendCap = creditsRow(provider, providerSnapshot.credits)
+  const spendCap = creditsRow(provider, providerSnapshot.credits, usageResetDay, now)
   return spendCap ? [spendCap] : null
 }
 

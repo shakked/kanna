@@ -1344,6 +1344,14 @@ export const DEFAULT_NEW_PROJECTS_DIRECTORY = "~/Kanna"
 
 /** Bounds of `idleSessionTimeoutMinutes`. 0 closes an idle session as soon as its turn ends. */
 export const DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES = 5
+
+/**
+ * Day of the month (local time) Claude's monthly spend cap is assumed to reset
+ * on. The usage API reports no reset date for it, so this is the user's guess.
+ */
+export const DEFAULT_USAGE_RESET_DAY = 1
+export const MIN_USAGE_RESET_DAY = 1
+export const MAX_USAGE_RESET_DAY = 28
 export const MIN_IDLE_SESSION_TIMEOUT_MINUTES = 0
 export const MAX_IDLE_SESSION_TIMEOUT_MINUTES = 1440
 
@@ -1434,6 +1442,8 @@ export interface AppSettingsSnapshot {
    * Off unless true, and absent when off.
    */
   widgetsPeekEnabled?: boolean
+  /** Assumed monthly reset day of the spend cap, 1–28. Absent when it is the default. */
+  usageResetDay?: number
   /** Base directory where cloned and newly created projects are placed. */
   newProjectsDirectory: string
   /**
@@ -1490,6 +1500,7 @@ export interface AppSettingsPatch {
   delegatorMode?: boolean
   chatTabsEnabled?: boolean
   widgetsPeekEnabled?: boolean
+  usageResetDay?: number
   newProjectsDirectory?: string
   setupShown?: boolean
   setupCompleted?: boolean

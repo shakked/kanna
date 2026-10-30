@@ -256,6 +256,12 @@ export const SETTINGS_ROWS = defineRows({
     description: "Close a chat's Claude Code or Codex process once it has sat idle this long, to free its memory. The next message resumes the session. Chats with work still running in them stay open.",
     keywords: ["memory", "idle", "timeout", "process", "session", "ram", "resume", "close"],
   },
+  usageResetDay: {
+    sectionId: "usage",
+    title: "Monthly Reset Day",
+    description: "The day of the month your Claude spend limit resets. Claude's usage data doesn't say, so this is an assumption: the composer's usage bar counts down to it. Uses this computer's time zone.",
+    keywords: ["usage", "spend", "limit", "reset", "monthly", "enterprise", "extra usage", "billing"],
+  },
   modelRegistry: {
     sectionId: "providers",
     title: "Model Registry",

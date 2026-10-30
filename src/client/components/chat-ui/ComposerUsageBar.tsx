@@ -20,6 +20,17 @@ function creditsSpent(credits: UsageLimitCredits): string | null {
   return credits.limitAmount !== null ? `${used} of ${formatMoneyExact(credits.limitAmount, credits.currency)} used` : `${used} used`
 }
 
+/** "Nov 1": the day a reset lands on, in local time. */
+function formatResetDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+}
+
+/** The first column: the window's short name, or for a spend cap its reset countdown. */
+function rowLead({ shortLabel, credits, assumedResetsAt }: ComposerUsageRow): string {
+  if (!credits) return shortLabel
+  return (assumedResetsAt && formatResetCountdown(assumedResetsAt)) || ""
+}
+
 /** The fourth column: the reset countdown, or for a spend cap what's left. */
 function rowTail({ window, credits }: ComposerUsageRow): string | null {
   return credits ? creditsLeft(credits) : formatResetCountdown(window.resetsAt)
@@ -43,7 +54,8 @@ function useMinuteTick() {
 const GRID_CLASS = "grid shrink-0 items-center gap-x-1.5 px-1 text-left text-[9px] font-medium leading-[9px]"
 const FULL_COLUMNS = "grid-cols-[auto_40px_auto_auto]"
 const COMPACT_COLUMNS = "grid-cols-[auto_40px_auto]"
-// A lone spend-cap row has no label, so no label column either.
+// A lone spend-cap row with no known reset has nothing to lead with, so no
+// first column either.
 const UNLABELED_FULL_COLUMNS = "grid-cols-[40px_auto_auto]"
 const UNLABELED_COMPACT_COLUMNS = "grid-cols-[40px_auto]"
 
@@ -54,12 +66,12 @@ function gridColumns(labeled: boolean, full: boolean): string {
 
 function UsageRows({ rows, showCountdown, labeled }: { rows: ComposerUsageRow[]; showCountdown: boolean; labeled: boolean }) {
   return rows.map((row) => {
-    const { window, shortLabel } = row
+    const { window } = row
     const usedPercent = Math.max(0, Math.min(100, window.usedPercent ?? 0))
     return (
       <Fragment key={window.id}>
         {/* Kept (empty) beside labelled rows, so the columns line up. */}
-        {labeled ? <span className="whitespace-nowrap">{shortLabel}</span> : null}
+        {labeled ? <span className="whitespace-nowrap tabular-nums">{rowLead(row)}</span> : null}
         <span className="h-[3px] overflow-hidden rounded-full bg-muted-foreground/20" aria-hidden="true">
           <span
             className={cn("block h-full rounded-full transition-[width] duration-500 ease-out", fillColorClass(usedPercent))}
@@ -101,7 +113,7 @@ export function ComposerUsageBar({
   useMinuteTick()
   // Re-read each minute, so a window that resets mid-session drops to 0%.
   const rows = rawRows.map((row) => ({ ...row, window: windowAsOf(row.window) }))
-  const labeled = rows.some((row) => row.shortLabel !== "")
+  const labeled = rows.some((row) => rowLead(row) !== "")
   const summary = rows.map((row) => {
     const tail = rowTail(row)
     const suffix = tail ? (row.credits ? `, ${tail}` : `, resets in ${tail}`) : ""
@@ -157,22 +169,29 @@ export function ComposerUsageBar({
       </TooltipTrigger>
       <TooltipContent side="top" align="start" className="w-max max-w-none px-3 py-2">
         <div className="space-y-1.5 leading-tight">
-          {rows.map(({ window, credits }) => {
-            const resets = window.resetsAt ? formatUntil(window.resetsAt) : null
+          {rows.map(({ window, credits, assumedResetsAt }) => {
+            const resets = window.resetsAt ? `Resets ${formatUntil(window.resetsAt)}` : null
+            const assumedReset = assumedResetsAt ? `Resets ${formatResetDate(assumedResetsAt)} (assumed)` : null
             const spent = credits ? creditsSpent(credits) : null
             // Pushed and refreshed reads are current; a cached one is from an
             // earlier session, so say how old it is.
             const stale = window.source === "cache" ? `Updated ${formatRelativeTime(window.recordedAt)}` : null
+            // A window's reset and age share a line; a spend cap says what was
+            // spent (and how old that is), then when it resets.
+            const lines = credits
+              ? [[spent, stale], [assumedReset]]
+              : [[resets, stale]]
             return (
               <div key={window.id}>
                 <div className="whitespace-nowrap text-xs font-medium text-foreground">
                   {window.label} · {formatPercent(window.usedPercent)} used
                 </div>
-                {resets || spent || stale ? (
-                  <div className="whitespace-nowrap text-xs text-muted-foreground">
-                    {[resets ? `Resets ${resets}` : spent, stale].filter(Boolean).join(" · ")}
-                  </div>
-                ) : null}
+                {lines.map((parts, index) => {
+                  const text = parts.filter(Boolean).join(" · ")
+                  return text ? (
+                    <div key={index} className="whitespace-nowrap text-xs text-muted-foreground">{text}</div>
+                  ) : null
+                })}
               </div>
             )
           })}

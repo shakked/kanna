@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from "react"
 import { ChevronRight } from "lucide-react"
 import type { ProviderUsageSnapshot, UsageLimitWindow, UsageLimitsSnapshot } from "../../../shared/types"
-import { PROVIDERS } from "../../../shared/types"
+import { DEFAULT_USAGE_RESET_DAY, MAX_USAGE_RESET_DAY, MIN_USAGE_RESET_DAY, PROVIDERS } from "../../../shared/types"
 import { PROVIDER_ICONS } from "../../components/chat-ui/ChatPreferenceControls"
+import { Input } from "../../components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip"
 import { formatRelativeTime } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
+import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import type { KannaState } from "../useKannaState"
+import { handleSettingsInputKeyDown, SETTINGS_NUMBER_INPUT_CLASS, SettingsField, SettingsGroup, SettingsRow } from "./shared"
+import { SETTINGS_ROWS } from "./registry"
 
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
@@ -432,8 +436,47 @@ export function useUsageLimits(socket: KannaState["socket"], active = true) {
   return { snapshot, refreshing, refresh }
 }
 
-export function UsageSection({ state }: { state: Pick<KannaState, "socket"> }) {
+/** The assumed monthly reset day of the spend cap (the API reports none). */
+function UsageResetDayRow({ onWrite }: { onWrite: KannaState["handleWriteAppSettings"] }) {
+  const resetDay = useAppSettingsStore((store) => store.settings?.usageResetDay) ?? DEFAULT_USAGE_RESET_DAY
+  const [draft, setDraft] = useState(String(resetDay))
+  useEffect(() => {
+    setDraft(String(resetDay))
+  }, [resetDay])
+
+  function commit() {
+    const next = Math.round(Number(draft))
+    if (draft.trim() === "" || !Number.isFinite(next)) {
+      setDraft(String(resetDay))
+      return
+    }
+    void onWrite({ usageResetDay: next }).catch(() => setDraft(String(resetDay)))
+  }
+
+  return (
+    <SettingsGroup title="Spend limit">
+      <SettingsRow def={SETTINGS_ROWS.usageResetDay} wideControl>
+        <SettingsField hint={`Day of the month, ${MIN_USAGE_RESET_DAY}–${MAX_USAGE_RESET_DAY}. An assumption, not read from Claude${resetDay === DEFAULT_USAGE_RESET_DAY ? ` (default ${DEFAULT_USAGE_RESET_DAY})` : ""}`}>
+          <Input
+            type="number"
+            min={MIN_USAGE_RESET_DAY}
+            max={MAX_USAGE_RESET_DAY}
+            step={1}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => handleSettingsInputKeyDown(event, commit)}
+            className={SETTINGS_NUMBER_INPUT_CLASS}
+          />
+        </SettingsField>
+      </SettingsRow>
+    </SettingsGroup>
+  )
+}
+
+export function UsageSection({ state }: { state: Pick<KannaState, "socket" | "handleWriteAppSettings"> }) {
   const { snapshot, refreshing, refresh: runRefresh } = useUsageLimits(state.socket)
+  const claudeHasSpendCap = snapshot?.providers.some((provider) => provider.provider === "claude" && provider.credits !== null) ?? false
 
   return (
     <div className="space-y-4">
@@ -455,6 +498,7 @@ export function UsageSection({ state }: { state: Pick<KannaState, "socket"> }) {
           Loading usage…
         </div>
       )}
+      {claudeHasSpendCap ? <UsageResetDayRow onWrite={state.handleWriteAppSettings} /> : null}
     </div>
   )
 }

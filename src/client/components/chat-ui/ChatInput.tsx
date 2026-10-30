@@ -365,9 +365,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
     return overrideContextWindowMaxTokens(contextWindowSnapshot, resolveClaudeContextWindowMaxTokens(providerPrefs.model))
   }, [contextWindowSnapshot, providerPrefs.model, providerPrefs.provider])
+  const usageResetDay = useAppSettingsStore((store) => store.settings?.usageResetDay)
   const composerUsage = useMemo(
-    () => selectComposerUsage(usageLimits, providerPrefs.provider, providerPrefs.model),
-    [usageLimits, providerPrefs.model, providerPrefs.provider],
+    () => selectComposerUsage(usageLimits, providerPrefs.provider, providerPrefs.model, Date.now(), usageResetDay),
+    [usageLimits, providerPrefs.model, providerPrefs.provider, usageResetDay],
   )
   // Free px left of the centred controls, for the pinned usage bar. Worked out
   // from widths (half of what the controls leave), not positions, so the bar

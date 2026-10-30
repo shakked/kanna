@@ -24,6 +24,7 @@ import { useSidebarViewStore } from "../stores/sidebarViewStore"
 import { useChatTabsStore } from "../stores/chatTabsStore"
 import { isBackgroundOpenClick } from "../lib/background-open"
 import { MachineSwitcher } from "./MachineSwitcher"
+import { SidebarUsage } from "../components/chat-ui/sidebar/SidebarUsage"
 import { SidebarExpandControls } from "./SidebarExpandControls"
 import { getResolvedKeybindings } from "../lib/keybindings"
 import { useIsStandalone } from "../hooks/useIsStandalone"
@@ -31,7 +32,7 @@ import { useHasFinePointer } from "../lib/pointer"
 import { isMacApp } from "../lib/macApp"
 import type { ChatPreview, ChatTouchedFilesResult, KeybindingsSnapshot, SidebarChatRow, UpdateSnapshot } from "../../shared/types"
 import { isNightlyVersion } from "../../shared/types"
-import type { SocketStatus } from "./socket"
+import type { KannaSocket, SocketStatus } from "./socket"
 import type { ConnectionHealth } from "./connectionHealth"
 import {
   getSidebarJumpTargetIndex,
@@ -80,6 +81,7 @@ function persistSidebarWidth(width: number) {
 }
 
 interface KannaSidebarProps {
+  socket: KannaSocket
   activeChatId: string | null
   connectionStatus: SocketStatus
   connectionHealth: ConnectionHealth
@@ -328,6 +330,7 @@ function useFocusMotion(focused: boolean) {
 }
 
 function KannaSidebarImpl({
+  socket,
   activeChatId,
   connectionStatus,
   connectionHealth,
@@ -1371,6 +1374,7 @@ function KannaSidebarImpl({
           onOpenExternalPath={onOpenExternalPath}
         />
 
+          <SidebarUsage socket={socket} />
           <MachineSwitcher />
         <div className={cn("hidden md:block border-t border-border p-2", isStandalone && "pb-[55px]")}>
           <button

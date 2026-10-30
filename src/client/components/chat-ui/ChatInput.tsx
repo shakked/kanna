@@ -1,7 +1,6 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { ArrowUp, AudioLines, Check, Copy, Loader2, Paperclip, Trash2 } from "lucide-react"
+import { ArrowUp, AudioLines, Check, Copy, Loader2, Plus, Trash2 } from "lucide-react"
 import {
-  chatModeFromFlags,
   type AgentProvider,
   type ChatAttachment,
   type ChatMode,
@@ -10,7 +9,7 @@ import {
   type ModelOptions,
   type ProviderCatalogEntry,
   resolveClaudeContextWindowMaxTokens,
-  type UsageLimitsSnapshot,
+  resolveModelLabel,
 } from "../../../shared/types"
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
@@ -18,6 +17,7 @@ import { ScrollArea } from "../ui/scroll-area"
 import { cn, generateUUID } from "../../lib/utils"
 import { useComposer } from "../../hooks/useComposer"
 import { useIsStandalone } from "../../hooks/useIsStandalone"
+import { useMediaQuery } from "../../hooks/useMediaQuery"
 import { useVoiceRecorder } from "../../hooks/useVoiceRecorder"
 import { RecordingWaveform } from "./RecordingWaveform"
 import { useShallow } from "zustand/react/shallow"
@@ -35,10 +35,8 @@ import { useUnauthenticatedHarnesses } from "../../stores/providerAuthStore"
 import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { resolveModifiedEnter, shouldSteerSubmit } from "../../../shared/submit-mode"
 import { SignInDialog } from "../auth/SignInDialog"
-import { ChatPreferenceControls } from "./ChatPreferenceControls"
-import { ContextWindowMeter } from "./ContextWindowMeter"
-import { ComposerUsageBar } from "./ComposerUsageBar"
-import { selectComposerUsage } from "../../lib/composerUsage"
+import { ChatModePicker } from "./ChatPreferenceControls"
+import { ComposerHarnessMenu } from "./ComposerHarnessMenu"
 import { AttachmentFileCard, AttachmentImageCard } from "../messages/AttachmentCard"
 import { getChatViewer, useViewerStore, viewerAttachmentFromChat } from "../../stores/viewerStore"
 import { activateAttachment } from "../viewer/attachmentActions"
@@ -60,6 +58,37 @@ import {
 import { useSidebarStore } from "../../stores/sidebarStore"
 
 /** Stable default, so a chat with no delegated work doesn't re-render on it. */
+
+const COMPOSER_SURFACE = "border border-border bg-background dark:bg-card"
+/** The one-line shape's separate surfaces, drawn on a phone only. */
+const PHONE_SURFACE = "max-md:border max-md:border-border max-md:bg-background max-md:dark:bg-card"
+const COMPOSER_FIELD = "min-w-0 flex-1 rounded-none text-base resize-none max-h-[200px] outline-none bg-transparent border-0 shadow-none placeholder:truncate"
+// Desktop's 3px left inset puts the placeholder and caret right against the
+// harness button, which already brings its own round padding. The wrap
+// measure shares this, so the text still wraps where the field does.
+const ROW_FIELD_PADDING = "py-3 pl-4 pr-1 md:py-4 md:pl-[3px] md:pr-2"
+const ROW_GRID: React.CSSProperties = {
+  gridTemplateColumns: "auto auto minmax(0, 1fr) auto",
+  gridTemplateAreas: '"harness mode capsule right"',
+}
+const STACKED_GRID: React.CSSProperties = {
+  gridTemplateColumns: "auto auto minmax(0, 1fr) auto auto",
+  gridTemplateAreas: '"field field field field field" "harness mode . plus right"',
+  columnGap: 4,
+  rowGap: 2,
+}
+
+/**
+ * Phone width is always the card: the field across the top, and under it
+ * [+] [icon model] on the left, [mic] [send] on the right. The middle
+ * column is empty space, or the waveform while recording.
+ */
+const PHONE_GRID: React.CSSProperties = {
+  gridTemplateColumns: "auto auto auto minmax(0, 1fr) auto",
+  gridTemplateAreas: '"field field field field field" "plus harness mode wave right"',
+  columnGap: 4,
+  rowGap: 2,
+}
 
 const MAX_FILES_PER_DROP = 50
 const MAX_CONCURRENT_UPLOADS = 3
@@ -210,13 +239,11 @@ interface Props {
   activeProvider: AgentProvider | null
   availableProviders: ProviderCatalogEntry[]
   contextWindowSnapshot?: ContextWindowSnapshot | null
-  /** Plan usage for every provider; the composer shows the selected one's. */
-  usageLimits?: UsageLimitsSnapshot | null
   previousPrompt?: string | null
   onEditModels?: () => void
   /** Enumerates the selected harness's invocable skills for the "/" menu. */
   onListSkills?: (provider: AgentProvider) => Promise<ChatSkillsSnapshot>
-  /** Said in place of "Build in <project>": whose composer this is, when the page has two. */
+  /** Said in place of the project: whose composer this is, when the page has two. */
   placeholder?: string
   /**
    * A second composer on the page, beside the main one: the previewed
@@ -237,6 +264,8 @@ interface Props {
    */
   oldestQueuedMessageId?: string | null
   onSendQueuedNow?: (queuedMessageId: string) => Promise<void>
+  /** Forces a layout; by default the viewport decides (phone below 768px). */
+  layout?: "phone" | "desktop"
 }
 
 export interface ChatInputHandle {
@@ -268,7 +297,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   activeProvider,
   availableProviders,
   contextWindowSnapshot = null,
-  usageLimits = null,
   previousPrompt = null,
   onEditModels,
   onListSkills,
@@ -277,6 +305,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   draftKey,
   oldestQueuedMessageId = null,
   onSendQueuedNow,
+  layout,
 }, forwardedRef) {
   // The draft's key: the chat's, unless the composer keeps its own.
   const draftId = draftKey ?? chatId ?? null
@@ -305,7 +334,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     activeProvider,
     availableProviders,
   })
-  const { composerChatId, providerSwitchPending, selectedProvider } = composer
+  const { composerChatId, selectedProvider } = composer
   const providerPrefs = composer.effectiveState
   const showModePicker = composer.supportsPlanMode
   // What Enter does while a turn is running; ⌘/Ctrl+Enter does the other.
@@ -324,10 +353,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const [value, setValue] = useState(() => (draftId ? getDraft(draftId) : ""))
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isStandalone = useIsStandalone()
-  // Leading/trailing gutter *inside* the controls scroller, standing in for the
-  // horizontal padding its wrapper can't have. Standalone keeps the same 32px
-  // net inset the old wrapper produced (20px padding + 12px spacer).
-  const controlsScrollSpacer = cn("min-w-3", isStandalone && "min-w-8")
   const [attachments, setAttachments] = useState<ComposerAttachment[]>(() => hydrateComposerAttachments(draftId ? getAttachmentDrafts(draftId) : []))
   const [uploadError, setUploadError] = useState<UploadErrorReport | null>(null)
   const uploadQueueRef = useRef<File[]>([])
@@ -355,8 +380,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   // The label goes into a textarea placeholder, which browsers do not clip
   // or ellipsize the way a span would: a long path runs past the pill. Keep
   // the path short enough to fit the narrowest composer (a phone) instead.
-  const projectLabel = projectRepoLabel ?? (projectPath ? abbreviatePathHead(formatPathWithTilde(projectPath), 40) : null)
-  const placeholder = placeholderOverride ?? (projectLabel ? `Build in ${projectLabel}` : "Build something...")
+  const projectLabel = projectRepoLabel ?? (projectPath ? abbreviatePathHead(formatPathWithTilde(projectPath), 28) : null)
+  const modelLabel = resolveModelLabel(composer.models, providerPrefs.model)
 
   const activeContextWindow = useMemo(() => {
     if (providerPrefs.provider !== "claude") {
@@ -365,33 +390,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
     return overrideContextWindowMaxTokens(contextWindowSnapshot, resolveClaudeContextWindowMaxTokens(providerPrefs.model))
   }, [contextWindowSnapshot, providerPrefs.model, providerPrefs.provider])
-  const usageResetDay = useAppSettingsStore((store) => store.settings?.usageResetDay)
-  const composerUsage = useMemo(
-    () => selectComposerUsage(usageLimits, providerPrefs.provider, providerPrefs.model, Date.now(), usageResetDay),
-    [usageLimits, providerPrefs.model, providerPrefs.provider, usageResetDay],
-  )
-  // Free px left of the centred controls, for the pinned usage bar. Worked out
-  // from widths (half of what the controls leave), not positions, so the bar
-  // falling back into the row can't move the controls and flip it back.
-  const controlsRowRef = useRef<HTMLDivElement>(null)
-  const preferenceControlsRef = useRef<HTMLDivElement>(null)
-  const [usageRoom, setUsageRoom] = useState<number | null>(null)
-  const [pinnedUsageFits, setPinnedUsageFits] = useState(true)
-  const hasComposerUsage = composerUsage !== null
-  useLayoutEffect(() => {
-    const row = controlsRowRef.current
-    const controls = preferenceControlsRef.current
-    if (!hasComposerUsage || !row || !controls || typeof ResizeObserver === "undefined") return
-    const measure = () => {
-      // left-[13px] inset, then 8px clear of the first control.
-      setUsageRoom(Math.floor((row.clientWidth - controls.scrollWidth) / 2) - 13 - 8)
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(row)
-    observer.observe(controls)
-    return () => observer.disconnect()
-  }, [hasComposerUsage])
   // "/" skill menu derivations. The mention is non-null only while the caret
   // is inside a "/token" anywhere in the prompt ("$token" also opens it on
   // codex, whose native sigil is "$" — accepting still completes to the
@@ -620,20 +618,76 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     }
   }, [inputElementRef])
 
+  // One line until the text wraps, then the field takes the whole width on
+  // top and the controls drop to a row under it. Whether it wraps is
+  // measured at the one-line field's width whichever shape is up, as iOS
+  // does (ComposerShape.swift): the stacked field is wider, and a decision
+  // taken at its width would flip back the moment the text fit again.
+  const [stackedByText, setStackedByText] = useState(false)
+  const surfaceRef = useRef<HTMLDivElement>(null)
+  const wrapMeasureRef = useRef<HTMLTextAreaElement>(null)
+  /** How much of the surface's width is not the field, in the one-line shape. */
+  const rowChromeRef = useRef(0)
+  const updateStacking = useCallback(() => {
+    const surface = surfaceRef.current
+    const field = textareaRef.current
+    const measure = wrapMeasureRef.current
+    if (!surface || !field || !measure) return
+    if (surface.dataset.shape !== "stacked") rowChromeRef.current = surface.clientWidth - field.clientWidth
+    if (field.value.length === 0) {
+      setStackedByText(false)
+      return
+    }
+    measure.style.width = `${Math.max(0, surface.clientWidth - rowChromeRef.current)}px`
+    measure.value = field.value
+    const style = window.getComputedStyle(measure)
+    const lineHeight = Number.parseFloat(style.lineHeight) || 24
+    const oneLine = lineHeight + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom)
+    setStackedByText(measure.scrollHeight > oneLine + lineHeight / 2)
+  }, [])
+
+  useLayoutEffect(() => {
+    autoResize()
+    updateStacking()
+    onLayoutChange?.()
+  }, [autoResize, onLayoutChange, updateStacking, value])
+
+  // The surface's width changes with the window and with the panes beside
+  // the chat; both move where the text wraps.
+  useEffect(() => {
+    const surface = surfaceRef.current
+    if (!surface || typeof ResizeObserver === "undefined") return
+    let lastWidth = surface.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (surface.clientWidth === lastWidth) return
+      lastWidth = surface.clientWidth
+      autoResize()
+      updateStacking()
+      onLayoutChange?.()
+    })
+    observer.observe(surface)
+    return () => observer.disconnect()
+  }, [autoResize, onLayoutChange, updateStacking])
+
+  const phoneViewport = useMediaQuery("(max-width: 767px)")
+  const phoneLayout = layout ? layout === "phone" : phoneViewport
+  // The desktop records on the one line; a phone is always the card.
+  const stacked = phoneLayout || (stackedByText && !recording)
+  // A phone's card names the model beside the harness, so its placeholder
+  // says where the turn goes: "Build in kanna/main...". The desktop's one
+  // line shows the harness's icon alone, so there the model leads it:
+  // "Opus · kanna/main".
+  const placeholder = phoneLayout
+    ? placeholderOverride ?? (projectLabel ? `Build in ${projectLabel}...` : "Build something...")
+    : `${modelLabel} · ${placeholderOverride ?? projectLabel ?? "Build something..."}`
+  const phoneBusy = recording || transcribing
+  // The new shape changes the field's width and the composer's height.
   useLayoutEffect(() => {
     autoResize()
     onLayoutChange?.()
-  }, [autoResize, onLayoutChange, value])
-
-  useEffect(() => {
-    const handleResize = () => {
-      autoResize()
-      onLayoutChange?.()
-    }
-
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [autoResize, onLayoutChange])
+  }, [autoResize, onLayoutChange, stacked])
+  const roundButtonSize = stacked ? "h-9 w-9" : "h-10 w-10 md:h-11 md:w-11"
+  const showModeTag = showModePicker && composer.optionControls.mode !== null && composer.optionControls.mode.selected !== "full-access"
 
   useLayoutEffect(() => {
     onLayoutChange?.()
@@ -717,6 +771,14 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
   function setEffectiveMode(mode: ChatMode) {
     composer.setMode(mode)
+  }
+
+  function handleProviderChange(provider: AgentProvider) {
+    if (provider !== selectedProvider && unauthenticatedHarnesses.has(provider)) {
+      setPendingSignInProvider(provider)
+      return
+    }
+    composer.selectProvider(provider)
   }
 
   const processUploadQueue = useCallback(() => {
@@ -1190,9 +1252,192 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     }
   }
 
+  // The composer's parts, shared by the desktop and phone-width layouts below.
+  const renderField = (className?: string) => (
+<Textarea
+                ref={setTextareaRefs}
+                placeholder={placeholder}
+                value={value}
+                autoFocus={!secondary}
+                {...{ [CHAT_INPUT_ATTRIBUTE]: "" }}
+                rows={1}
+                onChange={(event) => {
+                  setValue(event.target.value)
+                  setCaretPosition(event.target.selectionStart ?? event.target.value.length)
+                  if (draftId) setDraft(draftId, event.target.value)
+                  // No autoResize here: the layout effect on `value` runs it once
+                  // the DOM has the new text. Calling it here too thrashed layout
+                  // twice per keystroke.
+                }}
+                onSelect={(event) => {
+                  setCaretPosition(event.currentTarget.selectionStart ?? 0)
+                }}
+                onPaste={handlePaste}
+                onKeyDown={handleKeyDown}
+                disabled={disabled}
+                style={{ gridArea: "field" }}
+                className={cn(COMPOSER_FIELD, stacked ? "px-2.5 pt-1.5 pb-2" : ROW_FIELD_PADDING, className)}
+              />
+  )
+  const renderPlus = (sizeClassName: string, inert = false) => (
+<label
+                  aria-label="Add attachment"
+                  style={{ gridArea: "plus" }}
+                  className={cn(
+                    "relative flex shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full text-muted-foreground transition-colors hover:bg-muted/50",
+                    sizeClassName,
+                    disabled && "pointer-events-none opacity-70",
+                    inert && "pointer-events-none opacity-40",
+                  )}
+                >
+                  <Plus className="h-5 w-5" />
+                  {/* A real file input under the glyph, not a click forwarded to a
+                      hidden one: iOS Safari only opens its picker for a tap on the input. */}
+                  <input
+                    type="file"
+                    multiple
+                    disabled={disabled || inert}
+                    aria-label="Add attachment"
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    onChange={(event) => {
+                      const files = [...(event.target.files ?? [])]
+                      if (files.length > 0) {
+                        enqueueFiles(files)
+                      }
+                      event.target.value = ""
+                    }}
+                  />
+                </label>
+  )
+  const renderHarnessMenu = (props: { showModel: boolean; className: string; style?: React.CSSProperties }) => (
+    <ComposerHarnessMenu
+      composer={composer}
+      availableProviders={availableProviders}
+      onProviderChange={handleProviderChange}
+      onEditModels={onEditModels}
+      contextWindow={activeContextWindow}
+      {...props}
+    />
+  )
+  const renderModeTag = (className: string | false) => (
+    showModeTag && composer.optionControls.mode ? (
+              <div style={{ gridArea: "mode" }} className={cn("flex", className)}>
+                <ChatModePicker
+                  mode={composer.optionControls.mode.selected}
+                  options={composer.optionControls.mode.options}
+                  onModeChange={setEffectiveMode}
+                />
+              </div>
+            ) : null
+  )
+  /** Mic or check, then send or stop. `discardHere`: the desktop keeps the recording's discard here too. */
+  const renderRightButtons = (discardHere: boolean) => (
+    <>
+            {discardHere && recording ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                title="Discard recording"
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  discardRecording()
+                }}
+                className={cn("flex-shrink-0 rounded-full cursor-pointer text-muted-foreground touch-manipulation", roundButtonSize)}
+              >
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            ) : null}
+            {showMic || recording || transcribing ? (
+              <Button
+                type="button"
+                variant={recording ? "default" : "ghost"}
+                size="icon"
+                title={recording ? "Transcribe and send" : transcribing ? "Transcribing..." : "Record voice message"}
+                disabled={disabled || transcribing}
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  if (recording) void finishRecordingAndSend()
+                  else if (!transcribing) void recorder.startRecording()
+                }}
+                className={cn(
+                  "flex-shrink-0 rounded-full cursor-pointer touch-manipulation",
+                  roundButtonSize,
+                  recording
+                    ? "bg-slate-600 text-white dark:bg-white dark:text-slate-900"
+                    : "text-muted-foreground",
+                )}
+              >
+                {recording ? (
+                  <Check className="h-5 w-5 md:h-6 md:w-6" />
+                ) : transcribing ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <AudioLines className="h-5 w-5" />
+                )}
+              </Button>
+            ) : null}
+            {recording || transcribing || (showMic && !canCancel) ? null : (
+            // A box that hugs the button, for the hold's ring and hint to be
+            // placed against.
+            <StopChoicePopover
+              open={stopChoiceOpen}
+              onOpenChange={setStopChoiceOpen}
+              count={cascadingSubchats}
+              onStop={(cascade) => onCancel?.({ cascade })}
+            >
+            <span className="relative flex flex-shrink-0">
+            <Button
+              type="button"
+              aria-label={showStop ? "Stop" : "Send message"}
+              title={showStop ? (cascadingSubchats > 0 ? "Stop (hold Esc to stop this turn only)" : "Stop (hold Esc)") : undefined}
+              aria-haspopup={showStop && cascadingSubchats > 0 ? "menu" : undefined}
+              aria-expanded={showStop && cascadingSubchats > 0 ? stopChoiceOpen : undefined}
+              onPointerDown={(event) => {
+                event.preventDefault()
+                runPrimaryAction(event.metaKey || event.ctrlKey)
+              }}
+              // The pointer acts on the way down, above. This is for a click
+              // that no pointer made: Enter or Space on the button, and a
+              // screen reader's activation. Stop stays one press there.
+              onClick={(event) => {
+                if (event.detail === 0) runPrimaryAction(event.metaKey || event.ctrlKey)
+              }}
+              disabled={disabled || (!canCancel && !canSubmit) || hasPendingUploads}
+              size="icon"
+              className={cn(
+                "flex-shrink-0 bg-slate-600 text-white dark:bg-white dark:text-slate-900 rounded-full cursor-pointer touch-manipulation disabled:bg-white/60 disabled:text-slate-700",
+                roundButtonSize,
+              )}
+            >
+              {showStop ? (
+                <div className="w-3 h-3 md:w-4 md:h-4 rounded-xs bg-current" />
+              ) : (
+                <ArrowUp className="h-5 w-5 md:h-6 md:w-6" />
+              )}
+            </Button>
+            <HoldToStopRing arcRef={holdToStop.arcRef} shown={holdToStop.ringShown} />
+            <HoldToStopHint shown={holdToStop.hintShown} />
+            </span>
+            </StopChoicePopover>
+            )}
+    </>
+  )
+  /** Where the text would wrap on the one line; see updateStacking. */
+  const wrapMeasure = (
+            <Textarea
+              ref={wrapMeasureRef}
+              aria-hidden
+              tabIndex={-1}
+              readOnly
+              rows={1}
+              className={cn(COMPOSER_FIELD, ROW_FIELD_PADDING, "pointer-events-none invisible absolute left-0 top-0 h-0 overflow-hidden")}
+            />
+  )
+
   return (
     <div>
-      <div className={cn("px-3 pt-0", isStandalone && "px-5")}>
+      <div className={cn("px-3 pt-0 pb-3", isStandalone && "px-5 pb-5")}>
         <div className="relative max-w-[840px] mx-auto rounded-[32px]">
           {skillMenuOpen ? (
             <div
@@ -1296,126 +1541,128 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             <div className="max-w-[840px] mx-auto px-4 pb-1.5 text-xs text-destructive">{recorder.errorMessage}</div>
           ) : null}
           {/*
-            Opaque on purpose. A backdrop blur here re-samples and re-blurs
-            everything under the composer on every transcript repaint, which
-            during a streaming turn is every frame.
+            Opaque on purpose, in both layouts. A backdrop blur here
+            re-samples and re-blurs everything under the composer on every
+            transcript repaint, which during a streaming turn is every frame.
           */}
-          <div className="flex items-end max-w-[840px] mx-auto border bg-background dark:bg-card border-border rounded-[29px] pr-1.5">
+          {phoneLayout ? (
+          /*
+            Phone width: always the card, empty or not, since one line left
+            too little room. The field runs across the top; under it [+]
+            [icon model] sit on the left and [mic] [send] on the right.
+            Recording keeps the draft on top and the waveform takes the
+            middle of the row; the discard takes the harness's slot, and the
+            + stays put, dimmed and inert, so nothing moves.
+          */
+          <div
+            ref={surfaceRef}
+            data-shape="stacked"
+            data-layout="phone"
+            className={cn("relative grid items-center max-w-[840px] mx-auto rounded-[24px] p-1.5", COMPOSER_SURFACE)}
+            style={PHONE_GRID}
+          >
+            {renderField()}
+            {renderPlus("h-9 w-9", phoneBusy)}
+            <span data-slot="harness" style={{ gridArea: "harness" }} className="flex shrink-0">
+              {recording ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  title="Discard recording"
+                  aria-label="Discard recording"
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    discardRecording()
+                  }}
+                  className="h-9 w-9 flex-shrink-0 rounded-full cursor-pointer text-muted-foreground touch-manipulation"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </Button>
+              ) : renderHarnessMenu({ showModel: true, className: "h-9 px-2.5" })}
+            </span>
+            {renderModeTag(false)}
             {recording ? (
-              <div className="flex min-w-0 flex-1 items-center px-4 py-[6px] md:py-[10px]">
+              <div style={{ gridArea: "wave" }} className="flex min-w-0 items-center px-2">
                 <RecordingWaveform levels={recorder.levels} />
               </div>
-            ) : (
-            <Textarea
-              ref={setTextareaRefs}
-              placeholder={placeholder}
-              value={value}
-              autoFocus={!secondary}
-              {...{ [CHAT_INPUT_ATTRIBUTE]: "" }}
-              rows={1}
-              onChange={(event) => {
-                setValue(event.target.value)
-                setCaretPosition(event.target.selectionStart ?? event.target.value.length)
-                if (draftId) setDraft(draftId, event.target.value)
-                // No autoResize here: the layout effect on `value` runs it once
-                // the DOM has the new text. Calling it here too thrashed layout
-                // twice per keystroke.
-              }}
-              onSelect={(event) => {
-                setCaretPosition(event.currentTarget.selectionStart ?? 0)
-              }}
-              onPaste={handlePaste}
-              onKeyDown={handleKeyDown}
-              disabled={disabled}
-              className="min-w-0 flex-1 text-base p-3 md:p-4 !pr-2 md:pl-6 resize-none max-h-[200px] outline-none bg-transparent border-0 shadow-none placeholder:truncate"
-            />
-            )}
-            {recording ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                title="Discard recording"
-                onPointerDown={(event) => {
-                  event.preventDefault()
-                  discardRecording()
-                }}
-                className="flex-shrink-0 rounded-full cursor-pointer h-10 w-10 md:h-11 md:w-11 mb-1 mr-1 md:mb-1.5 text-muted-foreground touch-manipulation"
-              >
-                <Trash2 className="h-5 w-5" />
-              </Button>
             ) : null}
-            {showMic || recording || transcribing ? (
-              <Button
-                type="button"
-                variant={recording ? "default" : "ghost"}
-                size="icon"
-                title={recording ? "Transcribe and send" : transcribing ? "Transcribing..." : "Record voice message"}
-                disabled={disabled || transcribing}
-                onPointerDown={(event) => {
-                  event.preventDefault()
-                  if (recording) void finishRecordingAndSend()
-                  else if (!transcribing) void recorder.startRecording()
-                }}
-                className={cn(
-                  "flex-shrink-0 rounded-full cursor-pointer h-10 w-10 md:h-11 md:w-11 mb-1 md:mb-1.5 touch-manipulation",
-                  recording
-                    ? "bg-slate-600 text-white dark:bg-white dark:text-slate-900 -mr-0.5 md:mr-0"
-                    : "text-muted-foreground",
-                  showMic && (canCancel ? "mr-1" : "-mr-0.5 md:mr-0"),
-                )}
-              >
-                {recording ? (
-                  <Check className="h-5 w-5 md:h-6 md:w-6" />
-                ) : transcribing ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
+            <div style={{ gridArea: "right" }} className="flex shrink-0 items-center gap-1">
+              {/* With a draft, send has the circle and the mic sits before it. */}
+              {canSubmit && !phoneBusy ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  data-slot="mic"
+                  title="Record voice message"
+                  disabled={disabled}
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    void recorder.startRecording()
+                  }}
+                  className="h-9 w-9 flex-shrink-0 rounded-full cursor-pointer text-muted-foreground touch-manipulation"
+                >
                   <AudioLines className="h-5 w-5" />
-                )}
-              </Button>
-            ) : null}
-            {recording || transcribing || (showMic && !canCancel) ? null : (
-            // A box that hugs the button and carries its margins, for the
-            // hold's ring and hint to be placed against.
-            <StopChoicePopover
-              open={stopChoiceOpen}
-              onOpenChange={setStopChoiceOpen}
-              count={cascadingSubchats}
-              onStop={(cascade) => onCancel?.({ cascade })}
-            >
-            <span className="relative flex flex-shrink-0 mb-1 -mr-0.5 md:mr-0 md:mb-1.5">
-            <Button
-              type="button"
-              aria-label={showStop ? "Stop" : "Send message"}
-              title={showStop ? (cascadingSubchats > 0 ? "Stop (hold Esc to stop this turn only)" : "Stop (hold Esc)") : undefined}
-              aria-haspopup={showStop && cascadingSubchats > 0 ? "menu" : undefined}
-              aria-expanded={showStop && cascadingSubchats > 0 ? stopChoiceOpen : undefined}
-              onPointerDown={(event) => {
-                event.preventDefault()
-                runPrimaryAction(event.metaKey || event.ctrlKey)
-              }}
-              // The pointer acts on the way down, above. This is for a click
-              // that no pointer made: Enter or Space on the button, and a
-              // screen reader's activation. Stop stays one press there.
-              onClick={(event) => {
-                if (event.detail === 0) runPrimaryAction(event.metaKey || event.ctrlKey)
-              }}
-              disabled={disabled || (!canCancel && !canSubmit) || hasPendingUploads}
-              size="icon"
-              className="flex-shrink-0 bg-slate-600 text-white dark:bg-white dark:text-slate-900 rounded-full cursor-pointer h-10 w-10 md:h-11 md:w-11 touch-manipulation disabled:bg-white/60 disabled:text-slate-700"
-            >
-              {showStop ? (
-                <div className="w-3 h-3 md:w-4 md:h-4 rounded-xs bg-current" />
-              ) : (
-                <ArrowUp className="h-5 w-5 md:h-6 md:w-6" />
-              )}
-            </Button>
-            <HoldToStopRing arcRef={holdToStop.arcRef} shown={holdToStop.ringShown} />
-            <HoldToStopHint shown={holdToStop.hintShown} />
-            </span>
-            </StopChoicePopover>
-            )}
+                </Button>
+              ) : null}
+              {renderRightButtons(false)}
+            </div>
+            {wrapMeasure}
           </div>
+          ) : (
+          /*
+            Desktop. One line: the harness button, the field with + at its
+            end, then mic or send, on one surface. Once the text wraps it is
+            one card with the field on top. The children keep their order in
+            both shapes (stacked, the capsule's box dissolves into the grid),
+            so the textarea is never remounted under the caret. The change is
+            instant: it lands mid-keystroke.
+          */
+          <div
+            ref={surfaceRef}
+            data-shape={stacked ? "stacked" : "row"}
+            className={cn(
+              "relative grid items-center max-w-[840px] mx-auto",
+              stacked
+                ? cn(COMPOSER_SURFACE, "rounded-[24px] p-1.5")
+                : "md:rounded-[29px] md:border md:border-border md:bg-background md:dark:bg-card",
+            )}
+            style={stacked ? STACKED_GRID : ROW_GRID}
+          >
+            {renderHarnessMenu({
+              showModel: stacked,
+              style: { gridArea: "harness" },
+              className: stacked
+                ? "h-9 px-2.5"
+                : cn("h-11 w-11 ml-1.5 max-md:m-0 max-md:mr-2 max-md:h-[50px] max-md:w-[50px]", PHONE_SURFACE),
+            })}
+            {renderModeTag(!stacked && "max-md:mr-2")}
+            <div
+              style={{ gridArea: "capsule" }}
+              className={stacked ? "contents" : cn("flex min-w-0 items-center max-md:rounded-[25px]", PHONE_SURFACE)}
+            >
+              {recording ? (
+                <div style={{ gridArea: "field" }} className="flex min-w-0 flex-1 items-center px-4 py-[6px] md:px-2 md:py-[10px]">
+                  <RecordingWaveform levels={recorder.levels} />
+                </div>
+              ) : (
+              renderField()
+              )}
+              {recording || transcribing ? null : renderPlus(stacked ? "h-9 w-9" : "h-10 w-10 max-md:mr-1 md:h-11 md:w-11")}
+            </div>
+            <div
+              style={{ gridArea: "right" }}
+              className={cn(
+                "flex shrink-0 items-center gap-1",
+                !stacked && cn("ml-1 mr-1.5 max-md:ml-2 max-md:mr-0 max-md:rounded-full max-md:p-1", PHONE_SURFACE),
+              )}
+            >
+            {renderRightButtons(true)}
+            </div>
+            {wrapMeasure}
+          </div>
+          )}
         </div>
 
         {uploadError ? <UploadErrorNotice report={uploadError} /> : null}
@@ -1438,128 +1685,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
           event.target.value = ""
         }}
       />
-
-      {/*
-        Vertical padding only: horizontal padding here would clip the scroller
-        and stop the controls row from bleeding to the screen edge. The inset is
-        applied as leading/trailing spacers *inside* the scroller instead (see
-        controlsScrollSpacer), so the net gutter is unchanged but content can
-        scroll under the edge.
-      */}
-      <div ref={controlsRowRef} className={cn("relative py-3 max-w-[840px] mx-auto", isStandalone && "pt-3 pb-5")}>
-        <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-row">
-          <div className={controlsScrollSpacer} />
-          <label
-            aria-label="Add attachment"
-            className={cn(
-              "relative md:hidden shrink-0 self-center overflow-hidden mr-0.5 cursor-pointer",
-              "flex items-center gap-1.5 px-2 py-1 text-sm rounded-md transition-colors text-muted-foreground [&>svg]:shrink-0 [&>span]:whitespace-nowrap hover:bg-muted/50",
-              disabled && "pointer-events-none opacity-70",
-            )}
-          >
-            <Paperclip className="h-3.5 w-3.5" />
-            <span>Attach</span>
-            <input
-              type="file"
-              multiple
-              disabled={disabled}
-              aria-label="Add attachment"
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              onChange={(event) => {
-                const files = [...(event.target.files ?? [])]
-                if (files.length > 0) {
-                  enqueueFiles(files)
-                }
-                event.target.value = ""
-              }}
-            />
-          </label>
-          <ChatPreferenceControls
-            availableProviders={availableProviders}
-            selectedProvider={selectedProvider}
-            providerSwitchPending={providerSwitchPending}
-            model={providerPrefs.model}
-            modelOptions={providerPrefs.modelOptions}
-            onProviderChange={(provider) => {
-              if (provider !== selectedProvider && unauthenticatedHarnesses.has(provider)) {
-                setPendingSignInProvider(provider)
-                return
-              }
-              composer.selectProvider(provider)
-            }}
-            onModelChange={(_, model) => {
-              composer.selectModel(model)
-            }}
-            onModelOptionChange={(change) => {
-              switch (change.type) {
-                case "claudeReasoningEffort":
-                case "codexReasoningEffort":
-                case "piReasoningEffort":
-                  composer.setReasoningEffort(change.effort)
-                  break
-                case "fastMode":
-                  composer.setFastMode(change.fastMode)
-                  break
-              }
-            }}
-            onEditModels={onEditModels}
-            mode={chatModeFromFlags(providerPrefs.planMode, providerPrefs.autoPlan)}
-            onModeChange={setEffectiveMode}
-            includeMode={showModePicker}
-            hideDefaults
-            className="max-w-[840px] mx-auto"
-            rootRef={preferenceControlsRef}
-          />
-          {/* Below lg the usage bar rides at the end of the row, beside the
-              dial, so appearing never pushes the controls before it. From md
-              the dial is pinned over the row's right edge; mr-9 clears it.
-              From lg it comes back here only when the pinned one can't fit
-              beside the controls (a narrow pane, e.g. with the delegator
-              sidebar open). */}
-          {composerUsage ? (
-            <ComposerUsageBar
-              rows={composerUsage}
-              className={cn("ml-2 self-center md:mr-9", pinnedUsageFits && "lg:hidden")}
-            />
-          ) : null}
-          {activeContextWindow ? (
-            <div className="mx-[13px] flex items-center gap-2 md:hidden">
-              <ContextWindowMeter usage={activeContextWindow} />
-            </div>
-          ) : null}
-          <div className={controlsScrollSpacer} />
-        </div>
-
-        {/* The dial's mirror: pinned left, out of the centred row's flow, so
-            it can come and go (provider switch, first push) without moving
-            anything. Only from lg, where the row's centring leaves it room. */}
-        {composerUsage ? (
-          <div className={cn(
-            "absolute inset-y-0 left-[13px] hidden items-center lg:flex",
-            isStandalone ? "pt-3 pb-5" : "py-3",
-            // Kept mounted while it doesn't fit, so it can tell when it does.
-            !pinnedUsageFits && "invisible",
-          )}>
-            <ComposerUsageBar rows={composerUsage} room={usageRoom} onFitChange={setPinnedUsageFits} />
-          </div>
-        ) : null}
-
-        {/* right-[17px] is where the dial has always sat: right-[29px]
-            pulled back by translate-x-1/2 of its own 24px. */}
-        {activeContextWindow ? (
-          <div className={cn(
-            "absolute inset-y-0 right-[17px] hidden items-center gap-2 md:flex",
-            // Mirror the parent's own padding so this spans its *content* box.
-            // top-1/2 centred on the padded box instead, and the padding is
-            // asymmetric when standalone (pt-3 pb-5) — which put the dial 4px
-            // below the controls it sits beside. Matching the padding centres
-            // on the row itself, in both modes.
-            isStandalone ? "pt-3 pb-5" : "py-3"
-          )}>
-            <ContextWindowMeter usage={activeContextWindow} />
-          </div>
-        ) : null}
-      </div>
 
       <SignInDialog
         provider={pendingSignInProvider}

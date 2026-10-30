@@ -141,10 +141,11 @@ export function shortUsageLabel(window: UsageLimitWindow): string {
 }
 
 /**
- * Every limit on the composer's provider and model, shortest window first,
- * or null when that provider reports none. The server keeps every window it
- * has seen (`mergeUsageWindows`), so the rows stay put between reads. With no
- * windows, a spend cap stands in as the one row.
+ * Every limit on `provider` (for `model`, or the ones every model shares when
+ * it is null), shortest window first, or null when that provider reports
+ * none. The server keeps every window it has seen (`mergeUsageWindows`), so
+ * the rows stay put between reads. With no windows, a spend cap stands in as
+ * the one row.
  */
 export function selectComposerUsage(
   snapshot: UsageLimitsSnapshot | null,
@@ -164,17 +165,4 @@ export function selectComposerUsage(
   if (rows.length > 0) return rows
   const spendCap = creditsRow(provider, providerSnapshot.credits, usageResetDay, now)
   return spendCap ? [spendCap] : null
-}
-
-export type ComposerUsageLayout = "full" | "compact" | "none"
-
-/**
- * How the usage stack fits in `room` px: whole ("full"), without the reset
- * countdowns ("compact", dropped from every row at once so the rows stay
- * alike), or not at all. `room` null means unconstrained.
- */
-export function pickUsageLayout(room: number | null, fullWidth: number, compactWidth: number): ComposerUsageLayout {
-  if (room === null || room >= fullWidth) return "full"
-  if (room >= compactWidth) return "compact"
-  return "none"
 }

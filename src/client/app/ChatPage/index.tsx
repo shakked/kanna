@@ -53,18 +53,22 @@ import type { KannaState } from "../useKannaState"
 import { ChatInputDock } from "./ChatInputDock"
 import { DefaultModelsDialog } from "../../components/DefaultModelsDialog"
 import { ChatTranscriptViewport, type TranscriptScrollHandle } from "./ChatTranscriptViewport"
-import { TranscriptRenderOptionsProvider } from "../../components/messages/render-context"
+import { TranscriptRenderOptionsProvider, type SubmitSecrets } from "../../components/messages/render-context"
+import type { RequestSecretsToolResult, SecretsListResult } from "../../../shared/secrets"
+import { loadSecretBackend } from "../../lib/secret-storage"
 import { ToolPayloadProvider } from "../../components/messages/tool-payload-context"
 import { createToolPayloadStore } from "./toolPayloadStore"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
 import { CHAT_MIN_WORKSPACE_SIZE_PERCENT, WidgetsColumn } from "./WidgetsColumn"
 import { useChatPageSidebarActions, EMPTY_DIFF_SNAPSHOT } from "./useChatPageSidebarActions"
 import { useTranscriptJumpRequest } from "./useTranscriptJumpRequest"
+import { useUsageLimitsSnapshot } from "../../hooks/useUsageLimitsSnapshot"
 import { useTranscriptPaddingBottom } from "./useTranscriptPaddingBottom"
 import {
   EMPTY_STATE_TEXT,
   EMPTY_STATE_TYPING_INTERVAL_MS,
   hasFileDragTypes,
+  holdContextWindowSnapshot,
   sameContextWindowSnapshot,
 } from "./utils"
 
@@ -568,16 +572,24 @@ export function ChatPage() {
   const editorPreset = useTerminalPreferencesStore((store) => store.editorPreset)
   const editorCommandTemplate = useTerminalPreferencesStore((store) => store.editorCommandTemplate)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(state.keybindings), [state.keybindings])
-  const baseContextWindowSnapshotRef = useRef<ReturnType<typeof deriveLatestContextWindowSnapshot>>(null)
+  const baseContextWindowSnapshotRef = useRef<{
+    chatId: string | null
+    snapshot: ReturnType<typeof deriveLatestContextWindowSnapshot>
+  } | null>(null)
   const contextWindowSnapshot = useMemo(() => {
-    const derivedSnapshot = deriveLatestContextWindowSnapshot(state.chatSnapshot?.messages ?? EMPTY_TRANSCRIPT_ENTRIES)
-    const previousSnapshot = baseContextWindowSnapshotRef.current
-    if (sameContextWindowSnapshot(previousSnapshot, derivedSnapshot)) {
-      return previousSnapshot
+    const previous = baseContextWindowSnapshotRef.current
+    const nextSnapshot = holdContextWindowSnapshot(
+      previous,
+      state.activeChatId,
+      deriveLatestContextWindowSnapshot(state.chatSnapshot?.messages ?? EMPTY_TRANSCRIPT_ENTRIES),
+    )
+    if (previous?.chatId === state.activeChatId && sameContextWindowSnapshot(previous.snapshot, nextSnapshot)) {
+      return previous.snapshot
     }
-    baseContextWindowSnapshotRef.current = derivedSnapshot
-    return derivedSnapshot
-  }, [state.chatSnapshot?.messages])
+    baseContextWindowSnapshotRef.current = { chatId: state.activeChatId, snapshot: nextSnapshot }
+    return nextSnapshot
+  }, [state.activeChatId, state.chatSnapshot?.messages])
+  const usageLimits = useUsageLimitsSnapshot(state.socket)
 
   const isMobileViewport = useIsMobileViewport()
   // On a delegator the list of the chats under it is the floor of the pane:
@@ -1042,7 +1054,16 @@ export function ChatPage() {
     [state.socket, state.activeChatId]
   )
 
-  const transcriptRenderOptions = useMemo(() => ({ loadEntryDebugRaw }), [loadEntryDebugRaw])
+  const secretsSocket = state.socket
+  const submitSecrets = useCallback<SubmitSecrets>(async (toolUseId, answer) => {
+    if (!activeChatId) throw new Error("No chat is open")
+    return await secretsSocket.command<RequestSecretsToolResult>({ type: "secrets.submit", chatId: activeChatId, toolUseId, ...answer })
+  }, [activeChatId, secretsSocket])
+  const loadBackend = useCallback(() => loadSecretBackend(secretsSocket, (command) => secretsSocket.command<SecretsListResult>(command)), [secretsSocket])
+  const transcriptRenderOptions = useMemo(
+    () => ({ loadEntryDebugRaw, submitSecrets, loadSecretBackend: loadBackend }),
+    [loadEntryDebugRaw, submitSecrets, loadBackend],
+  )
 
   // One cache per chat: entry ids are chat-scoped, and leaving a chat should
   // not keep its payloads resident.
@@ -1384,6 +1405,7 @@ export function ChatPage() {
         activeProvider={state.runtime?.provider ?? null}
         availableProviders={state.availableProviders}
         contextWindowSnapshot={contextWindowSnapshot}
+        usageLimits={usageLimits}
         onSubmit={handleChatSubmit}
         onCancel={handleCancel}
         onEditModels={handleEditModels}

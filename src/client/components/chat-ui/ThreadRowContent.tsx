@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { MessageCircle, PencilLine } from "lucide-react"
+import { ChatCpuMeter } from "./ChatCpuMeter"
 import { DelegatorIcon } from "./delegator-icon"
 import { StatusMark } from "./StatusMark"
 import type { SidebarChatRow } from "../../../shared/types"
@@ -25,7 +26,7 @@ function statusDotClass(archived: boolean) {
 /**
  * Status glyph mirroring the sidebar chat rows: spinner while running, the
  * same spinner in grey while waiting on a subagent, a blue ping when waiting
- * on the user, a green ping when unread. Returns null for
+ * on the user, a still green dot when unread. Returns null for
  * idle chats so callers can fall back to a default icon — `uncommittedWork` is
  * carried by title contrast, not by this slot, so it only ever holds things
  * that want your attention.
@@ -33,7 +34,7 @@ function statusDotClass(archived: boolean) {
 export function renderChatStatusDot(chat: SidebarChatRow): ReactNode | null {
   if (chat.status === "starting" || chat.status === "running") return <StatusMark kind="working" />
   // Still going, but not in this chat: the grey a running task gets in the
-  // Tasks widget, which is where the work is. Ahead of the unread ping,
+  // Tasks widget, which is where the work is. Ahead of the unread dot,
   // because the reply it would flag is not the chat's last word.
   if (chat.status === "waiting_on_subagent") return <StatusMark kind="waiting_on_subagent" label={waitingOnLabel(chat.waitingOn)} />
   if (chat.status === "waiting_for_user") return <StatusMark kind="waiting" />
@@ -51,6 +52,7 @@ export function ThreadRowContent({
   delegatorMark = true,
   detailLabel,
   hoverActions,
+  cpuPercent = null,
 }: {
   thread: SidebarThread
   /** Use the sidebar status glyph (ping dots / spinner) instead of the chat icon. */
@@ -113,6 +115,12 @@ export function ThreadRowContent({
    * use a clickable div.
    */
   hoverActions?: ReactNode
+  /**
+   * The chat's CPU (its agent process and children), drawn just before the
+   * trailing label and fading with it under the hover actions. Null draws
+   * nothing; the server leaves out chats under 1%.
+   */
+  cpuPercent?: number | null
 }) {
   const statusDot = showStatus && !thread.archived ? renderChatStatusDot(thread.row) : null
   // Faint preview of the latest user prompt (already on the sidebar row). Fills
@@ -166,6 +174,9 @@ export function ThreadRowContent({
   // opted out of receding entirely.
   const needsAttention = thread.row.status !== "idle" || thread.row.unread
   const dimTitle = dimIdleTitles && !isActive && !hasUncommittedWork && !needsAttention
+  const cpu = cpuPercent != null && !thread.archived
+    ? <ChatCpuMeter percent={cpuPercent} chatId={thread.chatId} />
+    : null
   return (
     <>
       {statusDot ?? (showProjectIcon && !showsDraft && !isMarkedDelegator
@@ -204,7 +215,8 @@ export function ThreadRowContent({
           <span className="peer/actions absolute inset-y-0 right-0 z-10 hidden md:flex items-center justify-end gap-0 md:opacity-0 md:hover:opacity-100">
             {hoverActions}
           </span>
-          <span className="pointer-events-none flex min-w-0 items-center text-muted-foreground transition-opacity md:peer-hover/actions:opacity-0">
+          <span className="pointer-events-none flex min-w-0 items-center gap-1.5 text-muted-foreground transition-opacity md:peer-hover/actions:opacity-0">
+            {cpu}
             {/* `truncate` has to sit on a block, not on the flex parent —
                 text-overflow doesn't apply to a flex container, so putting it
                 up there clips a long `repo/branch` with no ellipsis. */}
@@ -214,6 +226,7 @@ export function ThreadRowContent({
       ) : (
         // See above: natural width, capped at half the row.
         <span className="ml-auto flex max-w-[50%] shrink-0 items-center gap-1.5 pl-3 text-xs">
+          {cpu}
           {detailLabel == null ? null : (
             <span className="min-w-0 truncate text-muted-foreground">{detailLabel}</span>
           )}

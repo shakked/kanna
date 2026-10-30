@@ -69,6 +69,19 @@ export function deriveLatestContextWindowSnapshot(
     return withDerivedMetrics(entry.usage, new Date(entry.createdAt).toISOString(), compactsAutomatically)
   }
 
+  // The chat had usage before the boundary: the new session starts empty, so
+  // show an empty meter rather than letting it vanish until the next reply.
+  const boundary = segmentStart > 0 ? entries[segmentStart - 1] : undefined
+  if (boundary && entries.slice(0, segmentStart).some((entry) =>
+    entry.kind === "context_window_updated" && entry.usage.usedTokens > 0
+  )) {
+    return withDerivedMetrics(
+      { usedTokens: 0, compactsAutomatically: false },
+      new Date(boundary.createdAt).toISOString(),
+      false,
+    )
+  }
+
   return null
 }
 

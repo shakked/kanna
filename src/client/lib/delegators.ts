@@ -39,8 +39,8 @@ export function delegatedThreads(threads: readonly SidebarThread[], delegatorCha
  * Whether a chat under a delegator wants the user: it is waiting on an
  * answer, or it has come to rest with something unread.
  *
- * A channel row's rule (`ChannelList`) without its exception for sub-chats.
- * Elsewhere a sub-chat's unread mark is its parent's business, which is why
+ * A channel row's rule (`ChannelList`) without its exception for hidden
+ * chats. Elsewhere a hidden sub-chat's unread mark is its parent's business, which is why
  * it makes no sound and adds to no count. This list is made of sub-chats,
  * and the mark is what its rows show, so here it counts: the number is the
  * rows in the list with a mark on them. A chat that finishes therefore stays

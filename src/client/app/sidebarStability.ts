@@ -48,6 +48,7 @@ function sameChatRow(left: SidebarChatRow, right: SidebarChatRow): boolean {
     && left.canFork === right.canFork
     && left.parentChatId === right.parentChatId
     && left.adopted === right.adopted
+    && left.hidden === right.hidden
 }
 
 /**

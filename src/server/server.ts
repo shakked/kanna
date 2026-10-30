@@ -4,6 +4,7 @@ import path from "node:path"
 import { stat } from "node:fs/promises"
 import { APP_NAME, getDataDir, getRuntimeProfile, LOG_PREFIX } from "../shared/branding"
 import type { ChatAttachment } from "../shared/types"
+import { DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES } from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import {
   CLOUD_BROWSER_PATH_PREFIX,
@@ -26,11 +27,12 @@ import { AppSettingsManager } from "./app-settings"
 import { refreshInstalledEditors } from "./editor-detection"
 import { refreshInstalledTerminals } from "./terminal-detection"
 import { UsageLimitsManager } from "./usage-limits"
+import { ChatCpuMonitor } from "./chat-cpu"
 import { DiffStore } from "./diff-store"
 import { WorktreeProbe } from "./worktree-probe"
 import { TurnFileTracker } from "./worktree-snapshot"
 import { backfillTouchedFileBases } from "./touched-file-backfill"
-import { resumeInterruptedTurns } from "./resume-turns"
+import { resumeInterruptedTurns, startOrphanedQueues } from "./resume-turns"
 import { ChatOrchestrator } from "./orchestrator"
 import { createChatCommands } from "./chat-commands"
 import { discoverProjects, type DiscoveredProject } from "./discovery"
@@ -54,9 +56,14 @@ import { createWsRouter, type ClientState } from "./ws-router"
 import { instanceFingerprint } from "./instance"
 import { deleteProjectUpload, inferAttachmentContentType, inferProjectFileContentType, persistProjectUpload } from "./uploads"
 import { getProjectUploadDir } from "./paths"
+import { zipPreviewResponse } from "./zip-preview"
 import { inheritShellPath } from "./process-utils"
 
 const MAX_UPLOAD_FILES = 50
+// Lower than an agent's attachments (kanna-display-tools.ts) for two reasons.
+// Cloudflare rejects request bodies over 100 MB, and cloud and --share uploads
+// ride its tunnel. And `req.formData()` holds the whole body in memory, inside
+// Bun's default 128 MB `maxRequestBodySize`. Raising it means streaming the body.
 const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
 const STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS = 60 * 1000
 const STALE_CHAT_AUTO_ARCHIVE_INTERVAL_MS = 6 * 60 * 60 * 1000
@@ -144,6 +151,8 @@ export interface StartKannaServerOptions {
     fetchLatestVersion: (packageName: string) => Promise<string>
     installVersion: (packageName: string, version: string) => UpdateInstallAttemptResult
     installNightly?: () => Promise<NightlyInstallResult>
+    /** Fire-and-forget cloudflared update, run next to each update check. */
+    checkCloudflared?: () => void
   }
 }
 
@@ -260,6 +269,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       installNightly: options.update.installNightly,
       devMode: runtimeProfile === "dev",
       trackEvent: analytics.track.bind(analytics),
+      onCheck: options.update.checkCloudflared,
     })
     : null
   const codexManager = new CodexAppServerManager()
@@ -267,6 +277,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     store,
     analytics,
     codexManager,
+    getProviderDefaults: () => appSettings.getSnapshot().providerDefaults,
+    getIdleSessionTimeoutMinutes: () => appSettings.getSnapshot().idleSessionTimeoutMinutes ?? DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {
@@ -304,6 +316,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   await usageLimits.initialize()
   agent.setClaudeRateLimitListener((info) => usageLimits.recordClaudeRateLimitPush(info))
   codexManager.setRateLimitsListener((snapshot) => usageLimits.recordCodexRateLimitPush(snapshot))
+  // Idle until a client subscribes to `chat-cpu`; the router switches it.
+  const chatCpu = new ChatCpuMonitor({ getChatProcesses: () => agent.getChatProcesses() })
 
   const providerAuth = new ProviderAuthManager({
     ...createProcessAuthDeps(),
@@ -346,6 +360,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     appSettings,
     analytics,
     usageLimits,
+    chatCpu,
     llmProvider: {
       read: readLlmProviderSnapshot,
       write: writeLlmProviderSnapshot,
@@ -435,6 +450,21 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     .then(async (resumedChatIds) => {
       if (resumedChatIds.length > 0) {
         console.log(`${LOG_PREFIX} resumed ${resumedChatIds.length} chat(s) interrupted by the last shutdown`)
+        await router.broadcastSnapshots()
+      }
+    })
+    // After the resumes, which drain their own queues when they end: the rest
+    // lost the turn that would have drained theirs (see resume-turns.ts).
+    .then(() => startOrphanedQueues({
+      store,
+      agent,
+      onError: (chatId, error) => {
+        console.warn(`${LOG_PREFIX} could not start chat ${chatId}'s queued message after restart:`, error)
+      },
+    }))
+    .then(async (startedChatIds) => {
+      if (startedChatIds.length > 0) {
+        console.log(`${LOG_PREFIX} started the queues of ${startedChatIds.length} chat(s) the last shutdown left waiting`)
         await router.broadcastSnapshots()
       }
     })
@@ -825,6 +855,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     router.dispose()
     providerAuth.dispose()
     usageLimits.dispose()
+    chatCpu.dispose()
     appSettings.dispose()
     keybindings.dispose()
     terminals.closeAll()
@@ -988,6 +1019,10 @@ async function handleAttachmentContent(req: Request, url: URL, store: EventStore
     return Response.json({ error: "Attachment not found" }, { status: 404 })
   }
 
+  // A zip's listing or one of its text files, past the same checks.
+  const zipResponse = await zipPreviewResponse(url, filePath)
+  if (zipResponse) return zipResponse
+
   return new Response(file, {
     headers: {
       "Content-Type": inferAttachmentContentType(storedName, file.type),
@@ -1025,11 +1060,21 @@ async function handleTranscriptMediaContent(req: Request, url: URL, store: Event
     return Response.json({ error: "Media not found" }, { status: 404 })
   }
 
+  // A zip's listing or one of its text files, past the same checks.
+  const zipResponse = await zipPreviewResponse(url, filePath)
+  if (zipResponse) return zipResponse
+
+  // PDFs show inline too: the viewer draws one in an iframe, and with the
+  // download headers that iframe stayed empty. Not sandboxed, because
+  // Chrome's PDF viewer won't load in a sandboxed document; a PDF's own
+  // script runs in the viewer's engine, not in this origin. Uploads serve
+  // PDFs the same way. The client's copy of this list is
+  // `TRANSCRIPT_MEDIA_INLINE` in src/client/components/viewer/attachmentActions.ts.
   return new Response(file, {
     headers: {
       "Content-Type": file.type || "application/octet-stream",
       "X-Content-Type-Options": "nosniff",
-      ...(!/^(image\/(png|jpeg|gif|webp|avif)|video\/(mp4|webm|quicktime|ogg))$/.test(file.type)
+      ...(!/^(image\/(png|jpeg|gif|webp|avif)|video\/(mp4|webm|quicktime|ogg)|application\/pdf)$/.test(file.type)
         ? { "Content-Disposition": "attachment", "Content-Security-Policy": "sandbox; default-src 'none'" } : {}),
       "Cache-Control": "private, max-age=31536000, immutable",
     },

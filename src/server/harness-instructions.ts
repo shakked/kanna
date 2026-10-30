@@ -17,11 +17,13 @@ export const KANNA_ORCHESTRATION_INSTRUCTIONS = [
   "- A sub-chat reports when its turn ends, and the report carries its final reply whole, so there is no need to read the chat for it. If it handed work off in turn, the report says it is not its last word, and another follows when that work comes back. Read the first as progress, not as the result. `read_chat` reads anything else: earlier turns, its tool calls and their output.",
   "- To use another chat's result, have it report here (start it with `create_chat`, or pass `adopt: true` to `send_message`) and end your turn. Its reply arrives as a message and wakes this chat. Do not poll it with `read_chat` meanwhile.",
   "- Pass `subchat: false` to `create_chat` only when the user asks for a separate chat of their own. It reports nothing back.",
+  "- A sub-chat is shown under this chat, not in the user's sidebar. Pass `showInSidebar: true` only when the user asks to see it there. It still reports here.",
   "- `fork_chat` copies a conversation, context included. `create_chat` starts empty.",
   "- Each chat is one piece of work, and its title (required on `create_chat`, `fork_chat` and `send_message`) says what. New work goes to a new chat, or to a fork of one whose context it needs, titled for the new work: prefer a fork to retitling a chat. `send_message` is for follow-ups, with the chat's current title or a sharper one.",
   "- `set_schedule` sends a message later or on a repeat, into this chat by default. Use it to check on something in a while instead of sleeping.",
   "- `send_message` to a chat you did not start gets nothing back when that chat finishes. When you need its result, pass `adopt: true`: the chat becomes your sub-chat and its reply arrives here as a message. An adopted chat is still the user's, so it stays in their sidebar.",
   "- Stopping this chat stops the sub-chats it started, not ones it adopted. Stop one yourself with `cancel_chat` when it is no longer needed.",
+  "- When a task needs credentials (API keys, tokens, passwords), ask with `request_secrets`. Never ask the user to paste one into the chat or to run the security command themselves. You never see the values: use them by name with `kanna secret exec KEY -- <command>`.",
 ].join("\n")
 
 /**
@@ -52,7 +54,12 @@ export const KANNA_DELEGATOR_INSTRUCTIONS = [
   "- The chats under this one: `list_chats` with `parentChatId` set to this chat's id, which `get_context` gives.",
   "- Several unrelated tasks in one message go to several chats.",
   "- Every chat you hand work to has this chat as its parent: `create_chat` as a sub-chat, and `adopt: true` on `send_message` to a chat you did not start. Kanna applies both here whatever you pass.",
+  "- They are shown under this chat, not in the user's sidebar. When the user asks for a chat in the sidebar, or a chat of their own, pass `showInSidebar: true` (on `send_message` for one that exists). It is listed there and still reports here.",
   "- Tell the user which chat each task went to, and link it. When a chat reports, tell the user briefly what came back. Do not redo or re-check its work yourself.",
+  "",
+  "## Automations",
+  "",
+  "Almost always give each automation its own chat: a sub-chat from `create_chat`, titled for it (\"Daily churn-risk sweep\"), with `set_schedule`'s `chatId` pointed at it. Schedule into this chat only if the user asks: each run would fill this thread, which is for coordinating. `newChat` suits runs that are each independent and should start fresh; those chats go in the user's sidebar, not under this one.",
 ].join("\n")
 
 export const KANNA_VISUALIZATION_INSTRUCTIONS = [

@@ -4,8 +4,11 @@ import { BrowserRouter } from "react-router-dom"
 import "@fontsource-variable/bricolage-grotesque"
 import { App } from "./client/app/App"
 import { ThemeProvider } from "./client/hooks/useTheme"
+import { pauseAnimationsWhenAway } from "./client/lib/pauseAnimationsWhenAway"
 import "@xterm/xterm/css/xterm.css"
 import "./index.css"
+
+pauseAnimationsWhenAway()
 
 const container = document.getElementById("root")
 

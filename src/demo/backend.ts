@@ -809,6 +809,8 @@ export class DemoBackend {
         return { type: "provider-auth", data: createProviderAuth() }
       case "usage-limits":
         return { type: "usage-limits", data: { providers: [] } }
+      case "chat-cpu":
+        return { type: "chat-cpu", data: { chats: {}, cores: 1 } }
       case "terminal":
         return null
     }
@@ -931,6 +933,7 @@ export function createDemoAppSettings(theme: AppThemePreference): AppSettingsSna
     transcript: { windowAssistantMessages: DEFAULT_TRANSCRIPT_WINDOW_ASSISTANT_MESSAGES },
     defaultProvider: "claude",
     submitWhileRunning: "queue",
+    idleSessionTimeoutMinutes: 5,
     paneVisibility: { widgets: "chat", terminal: "chat" },
     providerDefaults: createDefaultProviderDefaults(),
     newSidebarEnabled: true,

@@ -152,7 +152,7 @@ describe("KannaTranscript", () => {
     expect(html).toContain("Please review these.")
   })
 
-  test("hides steer system-message text and renders a steer icon left of the user bubble", () => {
+  test("hides steer system-message text and marks nothing on a steered prompt", () => {
     const html = renderTranscript([
       {
         id: "user-steer-1",
@@ -170,7 +170,25 @@ Please check the latest error first.`,
 
     expect(html).not.toContain("The user would like you to know the following.")
     expect(html).toContain("Please check the latest error first.")
-    expect(html).toContain('aria-label="Sent mid-turn"')
+    expect(html).not.toContain("Sent mid-turn")
+    expect(html).not.toContain("<svg")
+  })
+
+  test("a steered message from another chat carries no mid-turn mark", () => {
+    const html = renderTranscript([
+      {
+        id: "sourced-steer-1",
+        kind: "user_prompt",
+        content: "Rebase first.",
+        source: { kind: "agent", chatId: "parent" },
+        steered: true,
+        attachments: [],
+        timestamp: new Date().toISOString(),
+      },
+    ])
+
+    expect(html).toContain("Rebase first.")
+    expect(html).not.toContain("Sent mid-turn")
   })
 
   test("does not render wrappers for context window updates", () => {
@@ -796,6 +814,27 @@ Please check the latest error first.`,
     expect(html).toContain("Model Changed")
     expect(html).toContain("Opus")
     expect(html.match(/data-provider-icon="claude"/g)).toHaveLength(1)
+  })
+
+  test("does not count a context-window marker alone as a model change", () => {
+    const init = (id: string, model: string) => ({
+      id,
+      kind: "system_init" as const,
+      provider: "claude" as const,
+      model,
+      tools: [],
+      agents: [],
+      slashCommands: [],
+      mcpServers: [],
+      timestamp: new Date().toISOString(),
+    })
+    const html = renderTranscript([
+      init("system-1", "claude-opus-5-5"),
+      init("system-2", "claude-opus-5-5[1m]"),
+      init("system-3", "claude-opus-5-5"),
+    ])
+
+    expect(html).not.toContain("Model Changed")
   })
 
   test("labels the session init after a handoff with only the destination harness", () => {

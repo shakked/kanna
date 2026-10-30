@@ -24,6 +24,7 @@ import {
   type OptimisticProcessingState,
   type OptimisticUserPrompt,
 } from "./kannaStateHelpers"
+import { visibleCommandError, type ConnectionHealth } from "./connectionHealth"
 import { foldChatSnapshot } from "./snapshotEquality"
 import type { KannaSocket } from "./socket"
 import { useChatCommands } from "./useChatCommands"
@@ -78,6 +79,8 @@ export function useChatSession({ socket, chatId, fallbackProviders }: {
   )
   const [chatReady, setChatReady] = useState(false)
   const [commandError, setCommandError] = useState<string | null>(null)
+  const [connectionHealth, setConnectionHealth] = useState<ConnectionHealth>("connecting")
+  useEffect(() => socket.onHealth(setConnectionHealth), [socket])
   const [optimisticUserPrompts, setOptimisticUserPrompts] = useState<OptimisticUserPrompt[]>([])
   const [optimisticProcessing, setOptimisticProcessing] = useState<OptimisticProcessingState | null>(null)
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
@@ -309,7 +312,7 @@ export function useChatSession({ socket, chatId, fallbackProviders }: {
     isProcessing,
     canCancel: canCancelStatus(runtimeStatus ?? undefined),
     isDraining: runtime?.isDraining ?? false,
-    commandError,
+    commandError: visibleCommandError(commandError, connectionHealth),
     readAnchorState,
     reportReadAnchor,
     hasOlderMessages: (snapshot?.startIndex ?? (cachedTranscript?.chatId === chatId ? cachedTranscript.startIndex : 0)) > 0,

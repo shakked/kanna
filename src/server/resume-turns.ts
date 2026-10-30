@@ -66,3 +66,42 @@ export async function resumeInterruptedTurns(deps: ResumeInterruptedTurnsDeps): 
 
   return resumed
 }
+
+export interface StartOrphanedQueuesDeps {
+  store: { state: StoreState }
+  agent: {
+    /** Starts the chat's next queued message unless a turn is already on its way. */
+    startNextQueuedMessage: (chatId: string) => Promise<boolean>
+  }
+  onError?: (chatId: string, error: unknown) => void
+}
+
+/**
+ * Boot-time counterpart to the drain at a turn's end: start the queue of every
+ * chat whose turn the previous process took down with messages still waiting.
+ *
+ * A queue drains only when a turn ends, and a turn the process died in never
+ * ends here, so without this its messages wait for good while `list_chats`
+ * calls the chat running — "a turn is about to start" is what a queue means
+ * (`Orchestrator.hasTurnInFlight`) — and the sidebar, rightly, does not.
+ *
+ * Run after `resumeInterruptedTurns`: a resumed chat is busy, and its queue
+ * drains when the resumed turn ends. A stopped chat's queue stays parked until
+ * someone sends again, as it does without a restart; an archived or deleted
+ * chat is left alone for the reason `isResumable` gives.
+ */
+export async function startOrphanedQueues(deps: StartOrphanedQueuesDeps): Promise<string[]> {
+  const started: string[] = []
+  for (const [chatId, queued] of deps.store.state.queuedMessagesByChatId) {
+    if (queued.length === 0) continue
+    const chat = deps.store.state.chatsById.get(chatId)
+    if (!chat || chat.deletedAt || chat.archivedAt) continue
+    if (chat.lastTurnOutcome === "cancelled") continue
+    try {
+      if (await deps.agent.startNextQueuedMessage(chatId)) started.push(chatId)
+    } catch (error) {
+      deps.onError?.(chatId, error)
+    }
+  }
+  return started
+}

@@ -54,6 +54,21 @@ export function sameContextWindowSnapshot(left: ContextWindowSnapshot | null, ri
     && left.updatedAt === right.updatedAt
 }
 
+/**
+ * The ring's snapshot for this render. A null derivation for the chat that
+ * already had usage (its transcript reloading or reconnecting, or a window
+ * that no longer reaches the last report) keeps the last known value, so the
+ * ring never blinks out. A different chat starts from its own derivation.
+ */
+export function holdContextWindowSnapshot(
+  previous: { chatId: string | null; snapshot: ContextWindowSnapshot | null } | null,
+  chatId: string | null,
+  derived: ContextWindowSnapshot | null,
+): ContextWindowSnapshot | null {
+  if (derived) return derived
+  return previous && previous.chatId === chatId ? previous.snapshot : null
+}
+
 export function hasFileDragTypes(types: Iterable<string>) {
   return Array.from(types).includes("Files")
 }

@@ -2,7 +2,7 @@ import { memo, type RefObject } from "react"
 import { ChatInput, type ChatInputHandle } from "../../components/chat-ui/ChatInput"
 import type { ContextWindowSnapshot } from "../../lib/contextWindow"
 import type { KannaState } from "../useKannaState"
-import type { AgentProvider, ChatSkillsSnapshot } from "../../../shared/types"
+import type { AgentProvider, ChatSkillsSnapshot, UsageLimitsSnapshot } from "../../../shared/types"
 
 interface ChatInputDockProps {
   inputRef: RefObject<HTMLDivElement | null>
@@ -20,6 +20,7 @@ interface ChatInputDockProps {
   activeProvider: AgentProvider | null
   availableProviders: KannaState["availableProviders"]
   contextWindowSnapshot: ContextWindowSnapshot | null
+  usageLimits?: UsageLimitsSnapshot | null
   onSubmit: KannaState["handleSend"]
   onCancel: () => void
   onEditModels: () => void
@@ -45,6 +46,7 @@ export const ChatInputDock = memo(function ChatInputDock({
   activeProvider,
   availableProviders,
   contextWindowSnapshot,
+  usageLimits,
   onSubmit,
   onCancel,
   onEditModels,
@@ -81,6 +83,7 @@ export const ChatInputDock = memo(function ChatInputDock({
             activeProvider={activeProvider}
             availableProviders={availableProviders}
             contextWindowSnapshot={contextWindowSnapshot}
+            usageLimits={usageLimits}
             previousPrompt={previousPrompt}
             onEditModels={onEditModels}
             onListSkills={onListSkills}

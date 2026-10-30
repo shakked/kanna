@@ -14,8 +14,9 @@ import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStor
 import type { ChatBrowserNotificationPreference, ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
 import { shouldShowChatBrowserNotification, showChatBrowserNotification } from "../lib/chatBrowserNotifications"
 import { getSetupLaunchAction, useProviderAuthStore } from "../stores/providerAuthStore"
+import { useChatCpuStore } from "../stores/chatCpuStore"
 import { SetupWizard } from "../components/auth/SetupWizard"
-import type { ChatPreview, ChatTouchedFilesResult, ProviderAuthSnapshot } from "../../shared/types"
+import type { ChatCpuSnapshot, ChatPreview, ChatTouchedFilesResult, ProviderAuthSnapshot } from "../../shared/types"
 import { playChatNotificationSound, shouldPlayChatSound } from "../lib/chatSounds"
 import { getBrowserWindowTitle, getChatNotificationEvents, getChatSoundBurstCount, type ChatNotificationEvent } from "./chatNotifications"
 import { KannaSidebar } from "./KannaSidebar"
@@ -232,6 +233,34 @@ function KannaLayout() {
     }
   }, [state.socket])
 
+  // Per-chat CPU for the chat rows. The server runs `ps` only while someone
+  // holds this subscription, so it is held only while the page is visible: a
+  // window in the background costs the machine nothing.
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null
+    const sync = () => {
+      const visible = document.visibilityState === "visible"
+      if (visible && !unsubscribe) {
+        unsubscribe = state.socket.subscribe<ChatCpuSnapshot>(
+          { type: "chat-cpu" },
+          (snapshot) => useChatCpuStore.getState().setSnapshot(snapshot),
+        )
+      } else if (!visible && unsubscribe) {
+        unsubscribe()
+        unsubscribe = null
+        // Stale figures would sit on the rows until the next push.
+        useChatCpuStore.getState().clear()
+      }
+    }
+    sync()
+    document.addEventListener("visibilitychange", sync)
+    return () => {
+      document.removeEventListener("visibilitychange", sync)
+      unsubscribe?.()
+      useChatCpuStore.getState().clear()
+    }
+  }, [state.socket])
+
   // Onboarding auto-launch (see getSetupLaunchAction): a first-ever launch
   // opens the wizard instantly — cards show live probe status inside — while
   // later launches wait for the probe round and re-open only when something
@@ -341,6 +370,7 @@ function KannaLayout() {
     <KannaSidebar
       activeChatId={state.activeChatId}
       connectionStatus={state.connectionStatus}
+      connectionHealth={state.connectionHealth}
       ready={state.sidebarReady}
       collapsed={state.sidebarCollapsed}
       showMobileBackButton={showMobileBackButton}

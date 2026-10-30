@@ -8,6 +8,7 @@ import { AccountInfoMessage } from "../components/messages/AccountInfoMessage"
 import { TextMessage } from "../components/messages/TextMessage"
 import { AskUserQuestionMessage } from "../components/messages/AskUserQuestionMessage"
 import { ExitPlanModeMessage } from "../components/messages/ExitPlanModeMessage"
+import { RequestSecretsMessage } from "../components/messages/RequestSecretsMessage"
 import { TodoWriteMessage } from "../components/messages/TodoWriteMessage"
 import { ToolCallMessage } from "../components/messages/ToolCallMessage"
 import { formatPromptBoundary, promptOriginLabel, ResultMessage, TimeBoundary } from "../components/messages/ResultMessage"
@@ -77,6 +78,11 @@ export interface ForkBoundaryMark {
   at: number
 }
 
+/** A model id without a trailing context-window marker such as "[1m]". */
+function baseModelId(model: string) {
+  return model.replace(/\[[^\]]*\]\s*$/, "")
+}
+
 function sameForkBoundary(left: ForkBoundaryMark | undefined, right: ForkBoundaryMark | undefined) {
   return left?.sourceChatId === right?.sourceChatId && left?.at === right?.at
 }
@@ -138,7 +144,7 @@ function isCollapsibleToolCall(message: HydratedTranscriptMessage) {
   if (message.kind !== "tool") return false
   // A chat's card or a schedule's stands on its own like a chart does: folded
   // into "3 tool calls" it would hide the one thing it is there to show.
-  if (message.toolKind === "ask_user_question" || message.toolKind === "display") return false
+  if (message.toolKind === "ask_user_question" || message.toolKind === "display" || message.toolKind === "request_secrets") return false
   if (isChatToolCall(message) || isScheduleToolCall(message)) return false
   const toolName = (message as ProcessedToolCall).toolName
   return !SPECIAL_TOOL_NAME_SET.has(toolName)
@@ -279,13 +285,16 @@ function buildTranscriptMessageRenderStates(
   }
 
   // Mark session inits whose model differs from the previous session's model.
+  // A context-window marker alone ("claude-opus-5-5" vs "claude-opus-5-5[1m]")
+  // is the same model, so it is not a change.
   const modelChanges = new Array<boolean>(messages.length).fill(false)
   let previousModel: string | undefined
   for (let index = 0; index < messages.length; index++) {
     const message = messages[index]!
     if (message.kind !== "system_init") continue
-    modelChanges[index] = previousModel !== undefined && message.model !== previousModel
-    previousModel = message.model
+    const model = baseModelId(message.model)
+    modelChanges[index] = previousModel !== undefined && model !== previousModel
+    previousModel = model
   }
 
   // Attach each handoff boundary to the next session init: the switch renders
@@ -412,7 +421,6 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
     case "user_prompt":
       return left.content === (right.kind === "user_prompt" ? right.content : null)
         && right.kind === "user_prompt"
-        && left.steered === right.steered
         && sameAttachmentArray(left.attachments, right.attachments)
     case "system_init":
       return right.kind === "system_init"
@@ -604,8 +612,8 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
     const bubble = !promptHasBody(message)
       ? null
       : message.source
-        ? <SourcedMessage key={message.id} content={message.content} source={message.source} attachments={message.attachments} steered={message.steered} flash={flash} />
-        : <UserMessage key={message.id} content={message.content} attachments={message.attachments} steered={message.steered} flash={flash} />
+        ? <SourcedMessage key={message.id} content={message.content} source={message.source} attachments={message.attachments} flash={flash} />
+        : <UserMessage key={message.id} content={message.content} attachments={message.attachments} flash={flash} />
     rendered = showsOwnBoundary ? (
       // 20px apart, the gap two transcript rows sit at (see the row's padding
       // in ChatTranscriptViewport), so the boundary reads as the row above.
@@ -660,6 +668,11 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
               isLatest={isLatestExitPlanMode}
             />
           )
+          break
+        }
+        if (message.toolKind === "request_secrets") {
+          // `isLoading` is "no result yet and the chat is still working": the form is live.
+          rendered = <RequestSecretsMessage key={message.id} message={message} isWaiting={isLoading} />
           break
         }
         if (message.toolKind === "todo_write") {

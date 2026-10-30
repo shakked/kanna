@@ -1,4 +1,4 @@
-import { BookText, Command, FlaskConical, Gauge, LaptopMinimal, MessageSquareQuote, ScrollText, Settings2, type LucideIcon } from "lucide-react"
+import { BookText, Command, FlaskConical, Gauge, KeyRound, LaptopMinimal, MessageSquareQuote, ScrollText, Settings2, type LucideIcon } from "lucide-react"
 import { macSetupAvailable } from "../../lib/macApp"
 
 /**
@@ -35,6 +35,12 @@ export const SETTINGS_SECTIONS = [
     label: "Skills",
     icon: BookText as LucideIcon,
     subtitle: "Global agent skills from the active skill lock file.",
+  },
+  {
+    id: "secrets",
+    label: "Secrets",
+    icon: KeyRound as LucideIcon,
+    subtitle: "API keys and tokens agents asked you for, by project. Kept in this machine's keychain; agents never see the values.",
   },
   {
     id: "keybindings",
@@ -238,6 +244,12 @@ export const SETTINGS_ROWS = defineRows({
     description: "Defaults for new Pi chats. Pi connects through the Model Registry.",
     keywords: ["model"],
   },
+  idleSessionTimeout: {
+    sectionId: "providers",
+    title: "Close Idle Sessions After",
+    description: "Close a chat's Claude Code or Codex process once it has sat idle this long, to free its memory. The next message resumes the session. Chats with work still running in them stay open.",
+    keywords: ["memory", "idle", "timeout", "process", "session", "ram", "resume", "close"],
+  },
   modelRegistry: {
     sectionId: "providers",
     title: "Model Registry",
@@ -281,6 +293,14 @@ export const SETTINGS_ROWS = defineRows({
     title: "Full Disk Access",
     description: "Lets agents work on projects anywhere in your home folder without macOS asking about each protected folder.",
     keywords: ["privacy", "permission", "tcc", "desktop", "documents", "downloads", "icloud"],
+  },
+
+  // Secrets
+  savedSecrets: {
+    sectionId: "secrets",
+    title: "Saved Secrets",
+    description: "Replace or delete the API keys and tokens agents asked for, by project.",
+    keywords: ["secrets", "api key", "token", "password", "credentials", "keychain", "request_secrets", "env", "environment"],
   },
 
   // Labs

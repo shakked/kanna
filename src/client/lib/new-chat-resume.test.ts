@@ -76,7 +76,7 @@ describe("resolveProjectNewChat", () => {
     expect(resolve({
       projectChats: [
         { chatId: "busy", lastMessageAt: 5 },
-        { chatId: "sub", parentChatId: "busy" },
+        { chatId: "sub", parentChatId: "busy", hidden: true },
       ],
       drafts: drafts({ busy: { text: "a", touchedAt: 3 }, sub: { text: "c", touchedAt: 1 } }),
     })).toEqual({ kind: "create" })
@@ -85,7 +85,7 @@ describe("resolveProjectNewChat", () => {
     expect(resolve({
       projectChats: [
         { chatId: "delegator", delegator: true, title: "Lead" },
-        { chatId: "sub", parentChatId: "busy", delegator: true },
+        { chatId: "sub", parentChatId: "busy", hidden: true, delegator: true },
       ],
       drafts: drafts({ delegator: { text: "b", touchedAt: 2 }, sub: { text: "c", touchedAt: 1 } }),
     })).toEqual({ kind: "delegator", chatId: "delegator" })
@@ -218,7 +218,7 @@ describe("resolveProjectNewChat", () => {
     })
 
     test("a delegator another chat's agent started is that chat's, and is not opened", () => {
-      expect(resolve({ projectChats: [{ chatId: "born-under", delegator: true, parentChatId: "busy" }, { chatId: "busy", lastMessageAt: 5 }] }))
+      expect(resolve({ projectChats: [{ chatId: "born-under", delegator: true, parentChatId: "busy", hidden: true }, { chatId: "busy", lastMessageAt: 5 }] }))
         .toEqual({ kind: "create" })
       // One the user made and an agent took on later is still the project's.
       expect(resolve({ projectChats: [{ chatId: "adopted", delegator: true, parentChatId: "busy", adopted: true }] }))

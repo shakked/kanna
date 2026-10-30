@@ -1802,6 +1802,68 @@ describe("AgentCoordinator claude integration", () => {
     queues.forEach((queue) => queue.close())
   })
 
+  test("a turn that names no Claude options keeps the live session's effort and fast mode", async () => {
+    const queues: AsyncEventQueue<any>[] = []
+    const startSessionCalls: Array<{ model: string; effort?: string; serviceTier?: string }> = []
+    const fastModeCalls: boolean[] = []
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async (args) => {
+        startSessionCalls.push({ model: args.model, effort: args.effort, serviceTier: args.serviceTier })
+        const events = new AsyncEventQueue<any>()
+        queues.push(events)
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => events.close(),
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          setFastMode: async (fastMode: boolean) => {
+            fastModeCalls.push(fastMode)
+          },
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({ kind: "result", subtype: "success", isError: false, durationMs: 0, result: "done" }),
+            })
+          },
+        }
+      },
+    })
+
+    // The user's turn, at medium in fast mode.
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "go",
+      model: "opus",
+      modelOptions: { claude: { reasoningEffort: "medium", fastMode: true } },
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    // A report names only the model: no restart, no fast-mode flip.
+    await coordinator.send({ type: "chat.send", chatId: "chat-1", provider: "claude", content: "report", model: "opus" })
+    await waitFor(() => store.turnFinishedCount === 2)
+
+    // An effort the caller names still wins.
+    await coordinator.send({ type: "chat.send", chatId: "chat-1", provider: "claude", content: "go", model: "opus", effort: "low" })
+    await waitFor(() => store.turnFinishedCount === 3)
+
+    expect(startSessionCalls).toEqual([
+      { model: "opus[1m]", effort: "medium", serviceTier: "fast" },
+      { model: "opus[1m]", effort: "low", serviceTier: "fast" },
+    ])
+    expect(fastModeCalls).toEqual([])
+
+    queues.forEach((queue) => queue.close())
+  })
+
   test("claudeToolset only offers EnterPlanMode in auto plan", () => {
     expect(claudeToolset(false)).not.toContain("EnterPlanMode")
     // ExitPlanMode stays available so a mid-session switch into plan mode
@@ -1984,7 +2046,7 @@ describe("AgentCoordinator claude integration", () => {
     expect(prompts[1]).toContain("<system-message>")
     expect(prompts[1]).toContain("</system-message>")
     // The steer block is wire-only: the transcript keeps the user's typed
-    // text verbatim, with the steered flag driving the UI affordance.
+    // text verbatim, with the steered flag recording the steer.
     const steeredEntry = store.messages.find(
       (entry) => entry.kind === "user_prompt" && entry.steered
     ) as Extract<TranscriptEntry, { kind: "user_prompt" }> | undefined
@@ -3395,6 +3457,21 @@ describe("waiting on a subagent", () => {
   function coordinator() {
     return new AgentCoordinator({ store: createFakeStore() as never, onStateChange: () => {} })
   }
+
+  test("a chat with a turn on its way reads as starting, not finished", () => {
+    const agent = coordinator()
+    // A queue drain, a resume or a steer's gap: `isBusy`, so `list_chats` says running.
+    const starts = agent as unknown as { markStarting(chatId: string): void; unmarkStarting(chatId: string): void }
+    agent.applySubagentActivity("chat-1", { kind: "started", id: "a1", type: "subagent", label: "explore" }, 1000)
+    starts.markStarting("chat-1")
+    expect(agent.isBusy("chat-1")).toBe(true)
+    expect(agent.getChatStatuses().get("chat-1")).toBe("starting")
+    // Not a turn yet: nothing to stop.
+    expect(agent.getActiveStatuses().has("chat-1")).toBe(false)
+
+    starts.unmarkStarting("chat-1")
+    expect(agent.getChatStatuses().get("chat-1")).toBe("waiting_on_subagent")
+  })
 
   test("a chat with no turn and a task still running is waiting on it", () => {
     const agent = coordinator()

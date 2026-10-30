@@ -3,11 +3,12 @@ import { ChevronDown, SquarePen } from "lucide-react"
 import type { SidebarProjectGroup } from "../../../shared/types"
 import { computeChannelSections, getChannelPeekGroups, type ChannelPeekGroup } from "../../lib/channel-sections"
 import { getThreadDetailLabel } from "../../lib/thread-detail-label"
-import { isSubChat, isUnreadForUser, type SidebarThread } from "../../lib/thread-sections"
+import { isUnreadForUser, type SidebarThread } from "../../lib/thread-sections"
 import { isBackgroundOpenClick } from "../../lib/background-open"
 import { getPathBasename } from "../../lib/formatters"
 import { cn, normalizeChatId } from "../../lib/utils"
 import { useChatHasDraft, useDraftStartTimes } from "../../stores/chatInputStore"
+import { useChatCpu } from "../../stores/chatCpuStore"
 import { usePendingSendTimes } from "../../stores/pendingSendStore"
 import { useSectionOverrides } from "../../stores/sidebarSectionStore"
 import { renderChatStatusDot, ThreadRowContent } from "../chat-ui/ThreadRowContent"
@@ -50,6 +51,7 @@ function PeekChatContent({ thread, nowMs, delegatorMark }: {
   delegatorMark: boolean
 }) {
   const hasDraft = useChatHasDraft(thread.chatId)
+  const cpuPercent = useChatCpu(thread.row.chatId)
   return (
     <ThreadRowContent
       thread={thread}
@@ -58,6 +60,7 @@ function PeekChatContent({ thread, nowMs, delegatorMark }: {
       hasDraft={hasDraft}
       delegatorMark={delegatorMark}
       detailLabel={getThreadDetailLabel(thread, "project-scoped", nowMs)}
+      cpuPercent={cpuPercent}
     />
   )
 }
@@ -241,8 +244,8 @@ interface ChannelRowProps {
  * and finds the row under the pointer by `CHANNEL_ROW_ATTRIBUTE`.
  */
 const ChannelRow = memo(function ChannelRow({ group, active, menuPinned, pinned, actions, onSelect }: ChannelRowProps) {
-  // A sub-chat finishing is its parent's news, not the channel's, so its
-  // unread mark is not counted. One that stops to ask you something still is.
+  // A hidden sub-chat finishing is its parent's news, not the channel's, so
+  // its unread mark is not counted. One that stops to ask you something still is.
   // Nor is the mark of a chat still working, which the window's title and
   // the notifications leave out for the same reason (`isUnreadForUser`).
   const unread = group.chats.some(isUnreadForUser)
@@ -254,7 +257,7 @@ const ChannelRow = memo(function ChannelRow({ group, active, menuPinned, pinned,
   // subagent, then unread.
   const leadChat = group.chats.find((chat) => chat.status === "running" || chat.status === "starting")
     ?? group.chats.find((chat) => chat.status === "waiting_for_user")
-    ?? group.chats.find((chat) => chat.status === "waiting_on_subagent" && !isSubChat(chat))
+    ?? group.chats.find((chat) => chat.status === "waiting_on_subagent" && !chat.hidden)
     ?? group.chats.find(isUnreadForUser)
   const statusMark = leadChat ? renderChatStatusDot(leadChat) : null
 

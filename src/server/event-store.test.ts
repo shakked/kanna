@@ -1985,3 +1985,69 @@ describe("chat pins", () => {
     expect(store.getChat(chat.id)!.pinnedAt).toBeUndefined()
   })
 })
+
+describe("sidebar visibility", () => {
+  test("a data dir from before the field gets it once, from the parent rule", async () => {
+    const dataDir = await createTempDataDir()
+    const line = (event: Record<string, unknown>) => `${JSON.stringify({ v: 2, ...event })}\n`
+    await writeFile(join(dataDir, "projects.jsonl"), line({ type: "project_opened", timestamp: 1, projectId: "p", localPath: dataDir, title: "P" }))
+    const created = (chatId: string, timestamp: number, parentChatId?: string) =>
+      line({ type: "chat_created", timestamp, chatId, projectId: "p", title: chatId, ...(parentChatId ? { parentChatId } : {}) })
+    await writeFile(join(dataDir, "chats.jsonl"), [
+      created("mine", 2),
+      created("child", 3, "mine"),
+      created("adopted", 4),
+      line({ type: "chat_parent_set", timestamp: 5, chatId: "adopted", parentChatId: "mine", adopted: true }),
+      // Born a sub-chat, adopted by another since: listed.
+      created("born-then-adopted", 6, "mine"),
+      line({ type: "chat_parent_set", timestamp: 7, chatId: "born-then-adopted", parentChatId: "adopted", adopted: true }),
+      // Adopted, then put back under the parent that started it by a failed adopt: hidden.
+      created("put-back", 8, "mine"),
+      line({ type: "chat_parent_set", timestamp: 9, chatId: "put-back", parentChatId: "adopted", adopted: true }),
+      line({ type: "chat_parent_set", timestamp: 10, chatId: "put-back", parentChatId: "mine", adopted: false }),
+      // Its parent link cleared: listed.
+      created("released", 11, "mine"),
+      line({ type: "chat_parent_set", timestamp: 12, chatId: "released", parentChatId: null, adopted: false }),
+    ].join(""))
+
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const oldRule = (chatId: string) => {
+      const chat = store.getChat(chatId)!
+      return chat.parentChatId != null && !chat.adopted
+    }
+    const ids = ["mine", "child", "adopted", "born-then-adopted", "put-back", "released"]
+    for (const chatId of ids) expect([chatId, Boolean(store.getChat(chatId)!.hidden)]).toEqual([chatId, oldRule(chatId)])
+    expect(ids.filter((chatId) => store.getChat(chatId)!.hidden)).toEqual(["child", "put-back"])
+    expect(existsSync(join(dataDir, "sidebar-visibility.json"))).toBe(true)
+
+    // It is the field from here on: an agent lists a sub-chat, and the next
+    // boot neither runs the migration again nor writes anything.
+    await store.setChatHidden("child", false)
+    const log = await readFile(join(dataDir, "chats.jsonl"), "utf8")
+    const reopened = new EventStore(dataDir)
+    await reopened.initialize()
+    expect(reopened.getChat("child")).not.toHaveProperty("hidden")
+    expect(reopened.getChat("put-back")?.hidden).toBe(true)
+    expect(await readFile(join(dataDir, "chats.jsonl"), "utf8")).toBe(log)
+  })
+
+  test("a chat is hidden at creation when it has a parent, unless told otherwise, and the flag survives compaction", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject(dataDir)
+    const own = await store.createChat(project.id)
+    const child = await store.createChat(project.id, { parentChatId: own.id, createdByChatId: own.id })
+    const listedChild = await store.createChat(project.id, { parentChatId: own.id, createdByChatId: own.id }, { hidden: false })
+    expect(own).not.toHaveProperty("hidden")
+    expect(child.hidden).toBe(true)
+    expect(listedChild).not.toHaveProperty("hidden")
+
+    await store.compact()
+    const reopened = new EventStore(dataDir)
+    await reopened.initialize()
+    expect(reopened.getChat(child.id)?.hidden).toBe(true)
+    expect(reopened.getChat(listedChild.id)).not.toHaveProperty("hidden")
+  })
+})

@@ -7,7 +7,7 @@ import { getDataDir, LOG_PREFIX } from "../shared/branding"
 import { toMessagePreview } from "../shared/message-preview"
 import { buildTranscriptOutline, findTranscriptWindowStart } from "../shared/transcript-window"
 import type { TranscriptOutlineEntry } from "../shared/types"
-import type { AgentProvider, ChatSchedule, QueuedChatMessage, ResolvedChatReadAnchor, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatSchedule, ModelOptions, QueuedChatMessage, ResolvedChatReadAnchor, TranscriptEntry } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
 import {
   type ChatEvent,
@@ -314,6 +314,7 @@ function getReplayEventPriority(event: StoreEvent) {
     case "chat_last_message_at_set":
     case "chat_report_owed_set":
     case "chat_parent_set":
+    case "chat_hidden_set":
     case "chat_delegator_set":
       return 9
     case "chat_pin_set":
@@ -358,6 +359,8 @@ export class EventStore {
   private readonly transcriptsDir: string
   /** Written once `slimTranscripts` has swept this data dir. */
   private readonly slimMarkerPath: string
+  /** Written once `migrateSidebarVisibility` has run on this data dir. */
+  private readonly visibilityMarkerPath: string
   private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
   private legacySidebarProjectOrder: string[] = []
@@ -398,6 +401,7 @@ export class EventStore {
     this.schedulesLogPath = path.join(this.dataDir, "schedules.jsonl")
     this.transcriptsDir = path.join(this.dataDir, "transcripts")
     this.slimMarkerPath = path.join(this.dataDir, "transcripts-slim.json")
+    this.visibilityMarkerPath = path.join(this.dataDir, "sidebar-visibility.json")
     this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
   }
 
@@ -421,6 +425,7 @@ export class EventStore {
     await this.loadSnapshot()
     await this.replayLogs()
     await this.hydrateChatMetadataFromTranscripts()
+    await this.migrateSidebarVisibility()
     await this.loadSidebarProjectOrder()
     if (!(await this.hasLegacyTranscriptData()) && await this.shouldCompact()) {
       await this.compact()
@@ -810,8 +815,17 @@ export class EventStore {
           ...(event.forkedFromChatId && event.forkedEntryCount != null ? { forkedEntryCount: event.forkedEntryCount } : {}),
           ...(event.createdByChatId ? { createdByChatId: event.createdByChatId } : {}),
           ...(event.delegator ? { delegator: true as const } : {}),
+          ...(event.hidden ? { hidden: true as const } : {}),
         }
         this.state.chatsById.set(chat.id, chat)
+        break
+      }
+      case "chat_hidden_set": {
+        const chat = this.state.chatsById.get(event.chatId)
+        if (!chat) break
+        // Where the chat is shown, not activity in it: `updatedAt` stays put.
+        if (event.hidden) chat.hidden = true
+        else delete chat.hidden
         break
       }
       case "chat_delegator_set": {
@@ -1007,6 +1021,7 @@ export class EventStore {
         // Kept from the previous turn when this one didn't name a model, so a
         // resumed background turn doesn't blank what the chat last ran with.
         if (event.model) chat.lastModel = event.model
+        if (event.modelOptions) chat.lastModelOptions = event.modelOptions
         // A new turn means the user re-engaged, so the chat is no longer "done".
         delete chat.doneAt
         break
@@ -1469,7 +1484,7 @@ export class EventStore {
   async createChat(
     projectId: string,
     lineage?: { parentChatId?: string; createdByChatId?: string },
-    options?: { delegator?: boolean; chatId?: string },
+    options?: { delegator?: boolean; chatId?: string; hidden?: boolean },
   ) {
     const project = this.state.projectsById.get(projectId)
     if (!project || project.deletedAt) {
@@ -1494,6 +1509,8 @@ export class EventStore {
       ...(lineage?.parentChatId ? { parentChatId: lineage.parentChatId } : {}),
       ...(lineage?.createdByChatId ? { createdByChatId: lineage.createdByChatId } : {}),
       ...(options?.delegator ? { delegator: true } : {}),
+      // A chat started under another is shown with it unless told otherwise.
+      ...((options?.hidden ?? Boolean(lineage?.parentChatId)) ? { hidden: true } : {}),
     }
     await this.append(this.chatsLogPath, event)
     return this.state.chatsById.get(chatId)!
@@ -1509,7 +1526,7 @@ export class EventStore {
    */
   async forkChat(
     sourceChatId: string,
-    options?: { atLastCompletedTurn?: boolean; parentChatId?: string; createdByChatId?: string },
+    options?: { atLastCompletedTurn?: boolean; parentChatId?: string; createdByChatId?: string; hidden?: boolean },
   ) {
     const sourceChat = this.requireChat(sourceChatId)
     const sourceSessionToken = sourceChat.sessionToken ?? sourceChat.pendingForkSessionToken ?? null
@@ -1567,6 +1584,9 @@ export class EventStore {
       ...(sourceChat.delegator ? { delegator: true as const } : {}),
       ...(options?.parentChatId ? { parentChatId: options.parentChatId } : {}),
       ...(options?.createdByChatId ? { createdByChatId: options.createdByChatId } : {}),
+      // The source's visibility is not inherited: the fork is a new chat, and
+      // where it is shown depends on who made it, as for `createChat`.
+      ...((options?.hidden ?? Boolean(options?.parentChatId)) ? { hidden: true } : {}),
     }
     await this.append(this.chatsLogPath, createEvent)
     // The fork carries the same conversation, so it carries the same claim on
@@ -1973,6 +1993,39 @@ export class EventStore {
     await this.append(this.chatsLogPath, event)
   }
 
+  /** Lists a chat, or leaves it out of the lists. See `ChatRecord.hidden`. */
+  async setChatHidden(chatId: string, hidden: boolean) {
+    const chat = this.requireChat(chatId)
+    if (Boolean(chat.hidden) === hidden) return
+    const event: ChatEvent = {
+      v: STORE_VERSION,
+      type: "chat_hidden_set",
+      timestamp: Date.now(),
+      chatId,
+      hidden,
+    }
+    await this.append(this.chatsLogPath, event)
+  }
+
+  /**
+   * Writes `ChatRecord.hidden` for the chats made before it was stored, from
+   * the rule that decided it until then: a chat is hidden when it has a parent
+   * that started it rather than adopted it. Every chat starts listed, so only
+   * those get an event.
+   *
+   * Runs once per data dir, recorded by a marker file written after the
+   * events. A boot cut short between the two runs it again, which changes
+   * nothing: each event is skipped when the chat already holds its value.
+   */
+  private async migrateSidebarVisibility() {
+    if (existsSync(this.visibilityMarkerPath)) return
+    for (const chat of this.state.chatsById.values()) {
+      if (chat.deletedAt || chat.parentChatId == null || chat.adopted) continue
+      await this.setChatHidden(chat.id, true)
+    }
+    await writeFile(this.visibilityMarkerPath, `${JSON.stringify({ version: 1, completedAt: Date.now() })}\n`, "utf8")
+  }
+
   /** Creates the schedule, or replaces the one with the same id. */
   async setSchedule(schedule: ChatSchedule) {
     const event: ScheduleEvent = {
@@ -2246,8 +2299,8 @@ export class EventStore {
     await this.append(this.queuedMessagesLogPath, event)
   }
 
-  /** `model` is what this turn runs with; omitted where the caller has none to name. */
-  async recordTurnStarted(chatId: string, model?: string) {
+  /** `model` and `modelOptions` are what this turn runs with; omitted where the caller has none to name. */
+  async recordTurnStarted(chatId: string, model?: string, modelOptions?: ModelOptions) {
     this.requireChat(chatId)
     const event: TurnEvent = {
       v: STORE_VERSION,
@@ -2255,6 +2308,7 @@ export class EventStore {
       timestamp: Date.now(),
       chatId,
       ...(model ? { model } : {}),
+      ...(modelOptions ? { modelOptions } : {}),
     }
     await this.append(this.turnsLogPath, event)
     this.onTurnStarted?.(chatId)

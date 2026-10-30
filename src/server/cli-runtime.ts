@@ -47,6 +47,8 @@ export interface CliUpdateOptions {
   installVersion: (packageName: string, version: string) => UpdateInstallAttemptResult
   /** Build main from source and install it globally (see server/nightly.ts). */
   installNightly?: () => Promise<NightlyInstallResult>
+  /** Fire-and-forget cloudflared update, run next to each update check. */
+  checkCloudflared?: () => void
   argv: string[]
   command: string
 }
@@ -83,6 +85,12 @@ export interface CliRuntimeDeps {
   fetchLatestVersion: (packageName: string, options?: { timeoutMs?: number }) => Promise<string>
   installVersion: (packageName: string, version: string) => UpdateInstallAttemptResult
   installNightly?: () => Promise<NightlyInstallResult>
+  /**
+   * Starts a background cloudflared update and returns at once
+   * (cloudflared-updater.ts). Fired beside the startup update check and
+   * passed on to the server's periodic one; never awaited.
+   */
+  startCloudflaredUpdate?: () => void
   openUrl: (url: string) => void
   /** Show the local URL in the Mac app; false when it isn't installed (see mac-app.ts). */
   openInMacApp?: (localUrl: string) => Promise<boolean>
@@ -155,6 +163,9 @@ Usage:
   ${CLI_COMMAND} stop          Stop the ${CLI_COMMAND} running on this machine (a terminal's, or the Mac app's)
   ${CLI_COMMAND} slim-transcripts
                        Rewrite stored transcripts without raw tool payloads (stop ${CLI_COMMAND} first)
+  ${CLI_COMMAND} secret exec KEY [KEY...] -- <command>
+                       Run <command> with this folder's project secrets as environment variables
+  ${CLI_COMMAND} secret list   Name the secrets saved for this folder's project (never their values)
 
 Options:
   --port <number>      Port to listen on (default: ${PROD_SERVER_PORT})
@@ -347,6 +358,11 @@ function normalizeVersion(version: string) {
     .filter((part) => Number.isFinite(part))
 }
 
+/** Version strings stamped by local fork builds ("0.86.0-local.abc1234"). */
+export function isLocalBuildVersion(version: string) {
+  return version.includes("-local.")
+}
+
 async function maybeSelfUpdate(_argv: string[], deps: CliRuntimeDeps) {
   if (process.env.KANNA_DISABLE_SELF_UPDATE === "1") {
     return null
@@ -367,6 +383,14 @@ async function maybeSelfUpdate(_argv: string[], deps: CliRuntimeDeps) {
   }
 
   if (!latestVersion || compareVersions(deps.version, latestVersion) >= 0) {
+    return null
+  }
+
+  // A local fork build ("0.86.0-local.<sha>") is never replaced on its own:
+  // the release would overwrite the fork on the next start or SIGUSR2 reload.
+  // The UpdateManager still reports the release, and Update installs it.
+  if (isLocalBuildVersion(deps.version)) {
+    deps.log(`${LOG_PREFIX} ${PACKAGE_NAME}@${latestVersion} is available; local build ${deps.version}, not installing`)
     return null
   }
 
@@ -449,6 +473,10 @@ export async function runCli(argv: string[], deps: CliRuntimeDeps): Promise<CliR
     return { kind: "exited", code: 1 }
   }
 
+  // Runs in parallel with the self-update check below and is not awaited. If
+  // that check restarts Kanna mid-download, the temp copy is abandoned and the
+  // new process tries again; the binary itself is never half-written.
+  deps.startCloudflaredUpdate?.()
   const shouldRestart = await maybeSelfUpdate(argv, deps)
   if (shouldRestart !== null) {
     return { kind: "restarting", reason: shouldRestart }
@@ -520,6 +548,7 @@ export async function runCli(argv: string[], deps: CliRuntimeDeps): Promise<CliR
       fetchLatestVersion: deps.fetchLatestVersion,
       installVersion: deps.installVersion,
       installNightly: deps.installNightly,
+      checkCloudflared: deps.startCloudflaredUpdate,
       argv,
       command: CLI_COMMAND,
     },

@@ -65,6 +65,7 @@ import {
 import { DEFAULT_TRANSCRIPT_WINDOW_ASSISTANT_MESSAGES } from "../../shared/transcript-window"
 import { CLOUD_WS_ENDPOINT_PATH, type CloudWsEndpointResponse } from "../../shared/cloud-api"
 import { KannaSocket, type SocketStatus } from "./socket"
+import { visibleCommandError, type ConnectionHealth } from "./connectionHealth"
 import { SIDEBAR_COLLAPSED_STORAGE_KEY } from "../lib/storageKeys"
 import { useAppSettingsSync } from "./useAppSettingsSync"
 import { useBackgroundChatSubscriptions } from "./useBackgroundChatSubscriptions"
@@ -196,6 +197,8 @@ export interface KannaState {
   appSettings: AppSettingsSnapshot | null
   llmProvider: LlmProviderSnapshot | null
   connectionStatus: SocketStatus
+  /** What to tell a person about the connection: quiet while reconnecting, loud once lost. */
+  connectionHealth: ConnectionHealth
   sidebarReady: boolean
   localProjectsReady: boolean
   commandError: string | null
@@ -307,6 +310,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   const transcriptCacheWriter = useMemo(() => createTranscriptCacheWriter(), [])
   const [projectDiffSnapshots, setProjectDiffSnapshots] = useState<Record<string, ChatDiffSnapshot | null>>({})
   const [connectionStatus, setConnectionStatus] = useState<SocketStatus>("connecting")
+  const [connectionHealth, setConnectionHealth] = useState<ConnectionHealth>("connecting")
   const sidebarReady = useSidebarReady()
   const [localProjectsReady, setLocalProjectsReady] = useState(false)
   const [chatReady, setChatReady] = useState(false)
@@ -352,6 +356,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   )
 
   useEffect(() => socket.onStatus(setConnectionStatus), [socket])
+  useEffect(() => socket.onHealth(setConnectionHealth), [socket])
 
   // Straight into the store, never into React state: a running turn moves a
   // sidebar field several times a second, and holding the snapshot here would
@@ -1356,9 +1361,10 @@ export function useKannaState(activeChatId: string | null): KannaState {
     appSettings,
     llmProvider,
     connectionStatus,
+    connectionHealth,
     sidebarReady,
     localProjectsReady,
-    commandError,
+    commandError: visibleCommandError(commandError, connectionHealth),
     startingLocalPath,
     sidebarCollapsed,
     messages,

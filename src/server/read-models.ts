@@ -18,7 +18,6 @@ import type { ProjectRepoLabel } from "./worktree-probe"
 import type { ChatRecord, StoreState, TouchedFile } from "./events"
 import { resolveLocalPath } from "./paths"
 import { SERVER_PROVIDERS } from "./provider-catalog"
-import { isSubChat } from "../shared/sub-chat"
 import { buildTranscriptOutline } from "../shared/transcript-window"
 import type { TranscriptOutlineEntry } from "../shared/types"
 
@@ -39,6 +38,9 @@ export function deriveStatus(chat: ChatRecord, activeStatus?: KannaStatus): Kann
   // waiting is one they leave alone.
   if (activeStatus === "waiting_on_subagent" && chat.lastTurnOutcome === "failed") return "failed"
   if (activeStatus) return activeStatus
+  // Cut short by a shutdown and about to be picked back up: in flight to
+  // `list_chats`, so not finished here either.
+  if (chat.resumePending) return "starting"
   if (chat.lastTurnOutcome === "failed") return "failed"
   return "idle"
 }
@@ -288,6 +290,7 @@ export function deriveSidebarData(
           localPath: project.localPath,
           provider: chat.provider,
           ...(chat.lastModel ? { model: chat.lastModel } : {}),
+          ...(chat.lastModelOptions ? { modelOptions: chat.lastModelOptions } : {}),
           lastMessageAt: chat.lastMessageAt,
           ...(chat.lastTurnStartedAt != null ? { lastTurnStartedAt: chat.lastTurnStartedAt } : {}),
           ...(chat.lastTurnEndedAt != null ? { lastTurnEndedAt: chat.lastTurnEndedAt } : {}),
@@ -307,6 +310,9 @@ export function deriveSidebarData(
           canFork: canForkChat(chat, activeStatuses, drainingChatIds) || undefined,
           ...(chat.parentChatId ? { parentChatId: chat.parentChatId } : {}),
           ...(chat.parentChatId && chat.adopted ? { adopted: true as const } : {}),
+          // Stated on every row, false included, so a client can tell a
+          // server that sends it from one that predates it.
+          hidden: Boolean(chat.hidden),
           ...(chat.delegator ? { delegator: true as const } : {}),
         }
       })
@@ -317,8 +323,8 @@ export function deriveSidebarData(
     const iconUrl = options?.projectIcons?.get(project.localPath)
     const chats = toSidebarChatRows(project, chatsByProjectId.get(project.id) ?? [])
     const archivedChats = toSidebarChatRows(project, archivedChatsByProjectId.get(project.id) ?? [])
-    // The lists a project shows leave sub-chats out; `chats` keeps them for lookups.
-    const listedChats = chats.filter((chat) => !isSubChat(chat))
+    // The lists a project shows leave hidden chats out; `chats` keeps them for lookups.
+    const listedChats = chats.filter((chat) => !chat.hidden)
     const { previewChats, olderChats } = getSidebarChatBuckets(listedChats, nowMs)
 
     return {
@@ -478,6 +484,7 @@ export function deriveChatSnapshot(
     sessionToken: chat.sessionToken,
     ...(chat.parentChatId ? { parentChatId: chat.parentChatId } : {}),
     ...(chat.parentChatId && chat.adopted ? { adopted: true as const } : {}),
+    ...(chat.hidden ? { hidden: true as const } : {}),
     ...(chat.delegator ? { delegator: true as const } : {}),
     ...(subagents?.length ? { subagents: [...subagents] } : {}),
     ...(schedules.length ? { schedules } : {}),

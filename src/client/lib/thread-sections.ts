@@ -1,4 +1,3 @@
-import { isSubChat } from "../../shared/sub-chat"
 import { isWorkingStatus, type SidebarChatRow, type SidebarData } from "../../shared/types"
 import { getProjectSidebarLabel, type ProjectSidebarLabel } from "./project-label"
 
@@ -89,15 +88,11 @@ export function carryProjectSidebarLabel(
   if (cached) projectLabelCache.set(to, cached)
 }
 
-// The rule for which chats the lists leave out. It lives in `shared` because
-// the server's sidebar lists apply it too.
-export { isSubChat }
-
 /**
  * Whether a chat's unread mark is the user's to hear about, as a sound, a
- * notification or a count. A sub-chat's is not: it finished for its parent,
- * which reports the result in its own turn. An adopted chat is in the lists,
- * so its mark is the user's like any other chat's.
+ * notification or a count. A hidden chat's is not: it is shown with its
+ * parent, which reports the result in its own turn. A listed chat's mark is
+ * the user's, sub-chat or not.
  *
  * Nor is the mark of a chat that is still working. Its turn ended, which is
  * what set the mark, but a chat waiting on a subagent has more to say, and the
@@ -105,14 +100,14 @@ export { isSubChat }
  * hearing about would be the one that made no sound. Held back until the chat
  * comes to rest, the mark is announced once, when everything is in.
  */
-export function isUnreadForUser(row: Pick<SidebarChatRow, "unread" | "parentChatId" | "adopted" | "status">): boolean {
-  return row.unread && !isSubChat(row) && !isWorkingStatus(row.status)
+export function isUnreadForUser(row: Pick<SidebarChatRow, "unread" | "hidden" | "status">): boolean {
+  return row.unread && !row.hidden && !isWorkingStatus(row.status)
 }
 
-/** The threads a list of chats shows: everything but sub-chats. */
+/** The threads a list of chats shows: everything but hidden chats (`SidebarChatRow.hidden`). */
 export function listedThreads(threads: SidebarThread[]): SidebarThread[] {
-  return threads.some((thread) => isSubChat(thread.row))
-    ? threads.filter((thread) => !isSubChat(thread.row))
+  return threads.some((thread) => thread.row.hidden)
+    ? threads.filter((thread) => !thread.row.hidden)
     : threads
 }
 

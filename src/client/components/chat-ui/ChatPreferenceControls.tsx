@@ -1,11 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react"
-import { Box, Brain, Gauge, ListTodo, LockOpen, Plus, Search, Sparkles, SquareMenu, SquareMinus } from "lucide-react"
+import { Box, Brain, Gauge, ListTodo, LockOpen, Plus, Search, Sparkles } from "lucide-react"
 import {
-  DEFAULT_CLAUDE_MODEL_OPTIONS,
   resolveModelLabel,
   type AgentProvider,
   type ChatMode,
-  type ClaudeContextWindow,
   type ClaudeModelOptions,
   type ClaudeReasoningEffort,
   type CodexModelOptions,
@@ -120,7 +118,6 @@ export function InputPopover({
 
 export type ModelOptionChange =
   | { type: "claudeReasoningEffort"; effort: ClaudeReasoningEffort }
-  | { type: "contextWindow"; contextWindow: ClaudeContextWindow }
   | { type: "codexReasoningEffort"; effort: CodexReasoningEffort }
   | { type: "piReasoningEffort"; effort: PiReasoningEffort }
   | { type: "fastMode"; fastMode: boolean }
@@ -218,6 +215,8 @@ interface ChatPreferenceControlsProps {
    */
   hideDefaults?: boolean
   className?: string
+  /** The controls' root, for callers that lay things out around the row. */
+  rootRef?: React.Ref<HTMLDivElement>
 }
 
 const MODE_ICONS: Record<ChatMode, typeof LockOpen> = {
@@ -243,6 +242,7 @@ export function ChatPreferenceControls({
   includeMode = true,
   hideDefaults = false,
   className,
+  rootRef,
 }: ChatPreferenceControlsProps) {
   const providerConfig = availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0]
   const unauthenticatedHarnesses = useUnauthenticatedHarnesses()
@@ -278,12 +278,6 @@ export function ChatPreferenceControls({
   const modeControl = includeMode && onModeChange && !(hideDefaults && controls.mode?.selected === "full-access")
     ? controls.mode
     : null
-  const contextWindowControl =
-    hideDefaults && controls.contextWindow?.selectedId === DEFAULT_CLAUDE_MODEL_OPTIONS.contextWindow
-      ? null
-      : controls.contextWindow
-  const ContextWindowIcon = controls.contextWindow?.selectedId === "1m" ? SquareMenu : SquareMinus
-
   const reasoningChangeFor = (effortId: string): ModelOptionChange =>
     selectedProvider === "claude"
       ? { type: "claudeReasoningEffort", effort: effortId as ClaudeReasoningEffort }
@@ -292,7 +286,7 @@ export function ChatPreferenceControls({
         : { type: "codexReasoningEffort", effort: effortId as CodexReasoningEffort }
 
   return (
-    <div className={cn("flex md:justify-center items-center gap-0.5", className)}>
+    <div ref={rootRef} className={cn("flex md:justify-center items-center gap-0.5", className)}>
       {showProviderPicker ? (
         <InputPopover
           disabled={providerLocked || !onProviderChange}
@@ -394,35 +388,6 @@ export function ChatPreferenceControls({
               description={effort.description}
               disabled={effort.disabled}
             />
-          ))}
-        </InputPopover>
-      ) : null}
-
-      {contextWindowControl ? (
-        <InputPopover
-          trigger={(
-            <>
-              <ContextWindowIcon className="h-3.5 w-3.5" />
-              <span>{
-                contextWindowControl.options.find((option) => option.id === contextWindowControl.selectedId)?.label
-                  ?? contextWindowControl.selectedId
-              }</span>
-            </>
-          )}
-        >
-          {(close) => contextWindowControl.options.map((option) => (
-            <PopoverMenuItem
-              key={option.id}
-                onClick={() => {
-                  onModelOptionChange({ type: "contextWindow", contextWindow: option.id as ClaudeContextWindow })
-                  close()
-                }}
-                selected={contextWindowControl.selectedId === option.id}
-                icon={option.id === "1m"
-                  ? <SquareMenu className="h-4 w-4 text-muted-foreground" />
-                  : <SquareMinus className="h-4 w-4 text-muted-foreground" />}
-                label={option.label}
-              />
           ))}
         </InputPopover>
       ) : null}

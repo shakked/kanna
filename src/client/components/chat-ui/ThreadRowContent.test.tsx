@@ -318,3 +318,29 @@ describe("ThreadRowContent delegator mark", () => {
     }
   })
 })
+
+describe("ThreadRowContent CPU meter", () => {
+  test("shows the chat's CPU with its tooltip", () => {
+    const html = renderRow({ thread: thread({ status: "running" }), cpuPercent: 12 })
+    expect(html).toContain('data-testid="chat-cpu"')
+    expect(html).toContain("12%")
+    expect(html).toContain('title="CPU (process + children), last 5s"')
+    expect(html).toContain("height:12%")
+  })
+
+  test("shows nothing without a figure, or for an archived chat", () => {
+    expect(renderRow({ thread: thread() })).not.toContain("chat-cpu")
+    expect(renderRow({ thread: thread({}, true), cpuPercent: 30 })).not.toContain("chat-cpu")
+  })
+
+  test("the meter caps at one full core but the number does not", () => {
+    const html = renderRow({ thread: thread({ status: "running" }), cpuPercent: 250 })
+    expect(html).toContain("250%")
+    expect(html).toContain("height:100%")
+  })
+
+  test("the title keeps its truncation beside the meter", () => {
+    const html = renderRow({ thread: thread({ status: "running" }), cpuPercent: 12 })
+    expect(html).toMatch(/class="[^"]*min-w-0[^"]*truncate|class="[^"]*truncate[^"]*min-w-0/)
+  })
+})

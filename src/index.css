@@ -212,6 +212,13 @@
      Snappy front-loads so hard that short travel looks instant; this keeps
      the move visible and still settles softly. */
   --ease-glide: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Stepped to 24 fps, like `kanna-ping` below: every working chat row has a
+     spinner, and at display rate each one is a compositor frame 120 times a
+     second. The spinners are open arcs (Loader2), so 15° a step still reads
+     as a smooth turn where 12 steps visibly ticks. `steps()` applies per
+     keyframe segment, so pulse's two 1s halves get 24 each. */
+  --animate-spin: spin 1s steps(24) infinite;
+  --animate-pulse: pulse 2s steps(24) infinite;
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -422,7 +429,7 @@
  * read as blinking. Still under reduced motion: the grey already says running.
  */
 .kanna-tile-pulse {
-  animation: kanna-tile-pulse 1.2s ease-in-out infinite;
+  animation: kanna-tile-pulse 1.2s steps(14) infinite;
 }
 
 @keyframes kanna-tile-pulse {
@@ -449,6 +456,27 @@
   .kanna-table-wave {
     animation: none;
   }
+
+  /* A frozen spinner would say nothing is happening, so it keeps turning,
+     slower and in coarser steps. Pulses are decoration and stop. */
+  :root {
+    --animate-spin: spin 2s steps(16) infinite;
+  }
+
+  .animate-pulse {
+    animation: none;
+  }
+}
+
+/*
+ * While the window is hidden or another app has focus, every animation holds
+ * its frame (pauseAnimationsWhenAway.ts toggles the class). Nobody is looking,
+ * and a paused animation produces no frames. It resumes where it left off.
+ */
+.kanna-paused *,
+.kanna-paused *::before,
+.kanna-paused *::after {
+  animation-play-state: paused !important;
 }
 
 /*
@@ -474,6 +502,14 @@
 
   .kanna-ping {
     animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+
+  .kanna-tile-pulse {
+    animation-timing-function: ease-in-out;
+  }
+
+  .animate-pulse {
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
   svg.animate-spin {
@@ -846,9 +882,9 @@
     outline: none;
   }
 
-  /* Slower spin animation */
+  /* Slower spin animation, stepped to 24 fps like --animate-spin */
   .animate-spin-slow {
-    animation: spin 1.5s linear infinite !important;
+    animation: spin 1.5s steps(36) infinite !important;
   }
 
   /* Fade-in animation for state transitions */

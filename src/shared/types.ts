@@ -1,4 +1,5 @@
 import type { TerminalPreset } from "./terminal-presets"
+import type { RequestSecretsInput, RequestSecretsToolResult } from "./secrets"
 
 export type { TerminalPreset }
 export const STORE_VERSION = 2 as const
@@ -273,14 +274,13 @@ export interface ProviderModelOption {
   supportedReasoningEfforts?: readonly CodexReasoningEffortOption[]
   defaultReasoningEffort?: CodexReasoningEffort
   supportsFastMode?: boolean
-  contextWindowOptions?: readonly ProviderContextWindowOption[]
-  /**
-   * Fixed context window (in tokens) for models that expose a single,
-   * non-selectable window. Drives the input-footer meter directly, bypassing
-   * the 200k/1m selector machinery. When set, `contextWindowOptions` should be
-   * omitted (no picker).
-   */
+  /** The model's context window in tokens. Drives the input-footer meter. */
   contextWindowTokens?: number
+  /**
+   * Appended to the model id when spawning, for a family whose 1M window is
+   * opt-in on the wire ("opus" → "opus[1m]"). See resolveClaudeApiModelId.
+   */
+  apiModelSuffix?: string
   supportsMaxReasoningEffort?: boolean
 }
 
@@ -320,11 +320,6 @@ const CODEX_REASONING_EFFORT_LABELS: Record<string, string> = {
 /** Picker label for an effort id the app-server reports ("xhigh" → "Extra High"). */
 export function codexReasoningEffortLabel(effort: string): string {
   return CODEX_REASONING_EFFORT_LABELS[effort] ?? titleCaseWord(effort)
-}
-
-export interface ProviderContextWindowOption {
-  id: ClaudeContextWindow
-  label: string
 }
 
 export const CLAUDE_REASONING_OPTIONS = [
@@ -368,12 +363,10 @@ export type PiReasoningEffort = (typeof PI_REASONING_OPTIONS)[number]["id"]
 export type GrokReasoningEffort = (typeof GROK_REASONING_OPTIONS)[number]["id"]
 
 export type ClaudeReasoningEffort = (typeof CLAUDE_REASONING_OPTIONS)[number]["id"]
-export type ClaudeContextWindow = "200k" | "1m"
 export type ServiceTier = "fast"
 
 export interface ClaudeModelOptions {
   reasoningEffort: ClaudeReasoningEffort
-  contextWindow: ClaudeContextWindow
   fastMode: boolean
 }
 
@@ -460,7 +453,6 @@ export type ModelOptions = Partial<{
 
 export const DEFAULT_CLAUDE_MODEL_OPTIONS = {
   reasoningEffort: "high",
-  contextWindow: "1m",
   fastMode: false,
 } as const satisfies ClaudeModelOptions
 
@@ -531,10 +523,8 @@ const LEGACY_CODEX_REASONING_OPTIONS = [
 const GPT_5_6_REASONING_OPTIONS = [...CODEX_REASONING_OPTIONS]
 const GPT_5_6_LUNA_REASONING_OPTIONS = CODEX_REASONING_OPTIONS.filter((option) => option.id !== "ultra")
 
-export const CLAUDE_CONTEXT_WINDOW_OPTIONS = [
-  { id: "1m", label: "1M" },
-  { id: "200k", label: "200k" },
-] as const satisfies readonly ProviderContextWindowOption[]
+/** Catalog fields for a family that runs at 1M through the "[1m]" model id. */
+export const CLAUDE_1M_CONTEXT = { contextWindowTokens: 1_000_000, apiModelSuffix: "[1m]" } as const
 
 function titleCaseWord(value: string) {
   return value.length === 0 ? value : `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`
@@ -679,15 +669,15 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
         id: "fable",
         label: deriveModelLabel("fable"),
         supportsEffort: true,
-        // Fable runs a fixed 1M window (no 200k/1m selector). The SDK reports a
-        // 2M window for it, so pin the meter to the real 1M ceiling here.
+        // Fable runs at 1M without the "[1m]" id. The SDK reports a 2M window
+        // for it, so pin the meter to the real 1M ceiling here.
         contextWindowTokens: 1_000_000,
       },
       {
         id: "opus",
         label: deriveModelLabel("opus"),
         supportsEffort: true,
-        contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
+        ...CLAUDE_1M_CONTEXT,
         supportsMaxReasoningEffort: true,
         // Fast mode is available on the Opus family. The SDK confirms this at
         // runtime via supportedModels() (see applyClaudeSdkModels).
@@ -697,7 +687,7 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
         id: "sonnet",
         label: deriveModelLabel("sonnet"),
         supportsEffort: true,
-        contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
+        ...CLAUDE_1M_CONTEXT,
       },
       {
         id: "haiku",
@@ -991,50 +981,15 @@ export function normalizeClaudeFastMode(modelId: string, fastMode?: unknown): bo
   return supportsClaudeFastMode(modelId) && fastMode === true
 }
 
-export function getClaudeContextWindowOptions(modelId: string): readonly ProviderContextWindowOption[] {
-  return getClaudeModelOption(modelId)?.contextWindowOptions ?? []
+// A Claude model with a 1M window always runs at it.
+export function resolveClaudeApiModelId(modelId: string): string {
+  return `${modelId}${getClaudeModelOption(modelId)?.apiModelSuffix ?? ""}`
 }
 
-// Preference normalization: models without a context window selector keep the
-// default *preference* instead of a clamped value, so switching to a model
-// that does support selection starts from the default rather than a stale
-// clamp. The effective window is resolved at usage time below.
-export function normalizeClaudeContextWindow(modelId: string, contextWindow?: unknown): ClaudeContextWindow {
-  const options = getClaudeContextWindowOptions(modelId)
-  if (options.length === 0) return DEFAULT_CLAUDE_MODEL_OPTIONS.contextWindow
-  return options.some((option) => option.id === contextWindow)
-    ? contextWindow as ClaudeContextWindow
-    : DEFAULT_CLAUDE_MODEL_OPTIONS.contextWindow
-}
-
-// Usage-time resolution: models without a 1m option always run at the
-// standard window regardless of the stored preference.
-export function resolveClaudeContextWindow(modelId: string, contextWindow?: unknown): ClaudeContextWindow {
-  const options = getClaudeContextWindowOptions(modelId)
-  if (!options.some((option) => option.id === "1m")) return "200k"
-  return normalizeClaudeContextWindow(modelId, contextWindow)
-}
-
-export function resolveClaudeApiModelId(modelId: string, contextWindow?: ClaudeContextWindow): string {
-  return resolveClaudeContextWindow(modelId, contextWindow) === "1m" ? `${modelId}[1m]` : modelId
-}
-
-export function resolveClaudeContextWindowTokens(contextWindow: ClaudeContextWindow): number {
-  switch (contextWindow) {
-    case "1m":
-      return 1_000_000
-    case "200k":
-    default:
-      return 200_000
-  }
-}
-
-// Effective context window (in tokens) for the input-footer meter. Models with
-// a fixed window (e.g. fable) short-circuit the 200k/1m selector.
-export function resolveClaudeContextWindowMaxTokens(modelId: string, contextWindow?: unknown): number {
-  const fixed = getClaudeModelOption(modelId)?.contextWindowTokens
-  if (typeof fixed === "number" && fixed > 0) return fixed
-  return resolveClaudeContextWindowTokens(resolveClaudeContextWindow(modelId, contextWindow))
+// Context window (in tokens) for the input-footer meter. A model the catalog
+// gives no window runs at the standard 200k.
+export function resolveClaudeContextWindowMaxTokens(modelId: string): number {
+  return getClaudeModelOption(modelId)?.contextWindowTokens ?? 200_000
 }
 
 /** Version strings stamped by nightly builds ("0.56.7-nightly.abc1234"). */
@@ -1107,6 +1062,11 @@ export interface SidebarChatRow {
    * hover card names the harness alone in that case.
    */
   model?: string
+  /**
+   * The options (effort, fast mode) `model` ran with. The
+   * composer of a reloaded chat starts from these, not from Settings.
+   */
+  modelOptions?: ModelOptions
   lastMessageAt?: number
   /** When the most recent turn started; with `lastTurnEndedAt`, how long it took. */
   lastTurnStartedAt?: number
@@ -1167,17 +1127,27 @@ export interface SidebarChatRow {
   hasAutomation: boolean
   canFork?: boolean
   /**
-   * The chat whose agent started this one as a sub-chat. Lists of chats leave
-   * these out: a sub-chat is shown with its parent, the way a subagent is. It
-   * stays in `chats` so anything that looks a chat up by id still finds it.
+   * The chat whose agent started this one as a sub-chat, or adopted it. What
+   * it reports to and what stopping cascades along. Whether lists show the
+   * chat is `hidden`'s to say, not this link's.
    */
   parentChatId?: string
   /**
    * Set when `parentChatId` came from the parent adopting the chat, not
-   * starting it. An adopted chat stays in every list: `isSubChat` in
-   * `shared/sub-chat.ts` is the rule. Never false; absent on every other row.
+   * starting it. Never false; absent on every other row.
    */
   adopted?: true
+  /**
+   * Whether lists of chats leave this one out: the sidebar, the palette, a
+   * project's page, and what counts as unread for the user. A hidden chat is
+   * shown with its parent, the way a subagent is. It stays in `chats` so
+   * anything that looks a chat up by id still finds it. See `ChatRecord.hidden`.
+   *
+   * The server states it on every row. Optional for a server that predates
+   * it, which a client of its own version never meets: such a server meant
+   * `parentChatId != null && !adopted`, the rule the field replaced.
+   */
+  hidden?: boolean
   /**
    * Set on a delegator: a chat that hands work to the chats under it instead
    * of doing it. Never false; absent on every other row.
@@ -1339,6 +1309,11 @@ export interface FsListResult {
 /** Default for `newProjectsDirectory` — expanded server-side at use time. */
 export const DEFAULT_NEW_PROJECTS_DIRECTORY = "~/Kanna"
 
+/** Bounds of `idleSessionTimeoutMinutes`. 0 closes an idle session as soon as its turn ends. */
+export const DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES = 5
+export const MIN_IDLE_SESSION_TIMEOUT_MINUTES = 0
+export const MAX_IDLE_SESSION_TIMEOUT_MINUTES = 1440
+
 /** One repository from the signed-in user's GitHub account (via the local `gh` CLI). */
 export interface GitHubRepoSummary {
   /** e.g. "owner/repo". */
@@ -1393,6 +1368,15 @@ export interface AppSettingsSnapshot {
     terminal: PaneVisibilityScope
   }
   providerDefaults: ChatProviderPreferences
+  /**
+   * Minutes a chat's agent process stays alive after its turn ends with
+   * nothing left running in it. 0 closes it as soon as the turn ends. The next
+   * message resumes the session, so this trades a little startup time on that
+   * message for memory. Claude and Codex: see `AgentCoordinator.scheduleIdleClose`.
+   * Always sent by this server; optional for older servers and fixtures, where
+   * DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES applies.
+   */
+  idleSessionTimeoutMinutes?: number
   /** Labs: the tabbed Chats/Projects "New Sidebar". On by default; false opts back into the legacy sidebar. */
   newSidebarEnabled: boolean
   /**
@@ -1462,6 +1446,7 @@ export interface AppSettingsPatch {
   chatSoundId?: ChatSoundId
   chatBrowserNotificationPreference?: ChatBrowserNotificationPreference
   submitWhileRunning?: SubmitWhileRunning
+  idleSessionTimeoutMinutes?: number
   newSidebarEnabled?: boolean
   projectIconsInChats?: boolean
   chatTabsEnabled?: boolean
@@ -1566,6 +1551,19 @@ export interface ProviderUsageSnapshot {
 
 export interface UsageLimitsSnapshot {
   providers: ProviderUsageSnapshot[]
+}
+
+/**
+ * Each chat's CPU over the last sample interval (~5s): its agent process plus
+ * every descendant, as a share of the whole machine (0–100, all `cores`
+ * together). One decimal under 10, whole above; a row shows under 1 as a
+ * dimmed "<1%". A chat with no live process is absent. Totals over a
+ * delegator's sub-chats are the client's to add up (it has the parent links).
+ */
+export interface ChatCpuSnapshot {
+  chats: Record<string, number>
+  /** Logical cores the share is taken over. */
+  cores: number
 }
 
 // ---------------------------------------------------------------------------
@@ -1840,6 +1838,13 @@ export interface AskUserQuestionToolCall
 export interface ExitPlanModeToolCall
   extends ToolCallBase<"exit_plan_mode", { plan?: string; summary?: string }> { }
 
+/**
+ * Kanna's `request_secrets`: a form for the user, whose values go to the
+ * keychain and never to the transcript. See shared/secrets.ts.
+ */
+export interface RequestSecretsToolCall
+  extends ToolCallBase<"request_secrets", RequestSecretsInput> { }
+
 export interface TodoWriteToolCall
   extends ToolCallBase<"todo_write", { todos: TodoItem[] }> { }
 
@@ -1907,6 +1912,7 @@ export interface ScheduleToolCall
 export type NormalizedToolCall =
   | AskUserQuestionToolCall
   | ExitPlanModeToolCall
+  | RequestSecretsToolCall
   | TodoWriteToolCall
   | SkillToolCall
   | GlobToolCall
@@ -2432,6 +2438,11 @@ export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
   resultTrimmed?: boolean
   timestamp: string
   /**
+   * When the `tool_result` entry was written, as `timestamp` is for the call.
+   * Set with `resultEntryId`; the two stamps are how long the call took.
+   */
+  resultTimestamp?: string
+  /**
    * What a subagent did, in order: the entries stamped with this call's
    * `toolId` as `parentToolUseId`, hydrated the same way as the main thread.
    * Only ever set on a `subagent_task` call. Absent when the agent has not
@@ -2456,6 +2467,7 @@ export interface ExitPlanModeToolResult {
 interface HydratedToolResultOverrides {
   ask_user_question: AskUserQuestionToolResult
   exit_plan_mode: ExitPlanModeToolResult
+  request_secrets: RequestSecretsToolResult
   read_file: ReadFileToolResult | string
 }
 
@@ -2468,6 +2480,7 @@ export type HydratedToolCallOf<K extends NormalizedToolCall["toolKind"]> = Hydra
 
 export type HydratedAskUserQuestionToolCall = HydratedToolCallOf<"ask_user_question">
 export type HydratedExitPlanModeToolCall = HydratedToolCallOf<"exit_plan_mode">
+export type HydratedRequestSecretsToolCall = HydratedToolCallOf<"request_secrets">
 export type HydratedTodoWriteToolCall = HydratedToolCallOf<"todo_write">
 export type HydratedSkillToolCall = HydratedToolCallOf<"skill">
 export type HydratedGlobToolCall = HydratedToolCallOf<"glob">
@@ -2641,6 +2654,8 @@ export interface ChatRuntime {
   parentChatId?: string
   /** Set when that parent adopted the chat. The same value as `SidebarChatRow.adopted`. */
   adopted?: true
+  /** Set when lists of chats leave it out. `SidebarChatRow.hidden` when true; absent otherwise. */
+  hidden?: true
   /** Set on a delegator. The same value as `SidebarChatRow.delegator`. */
   delegator?: true
   /** With `status: "waiting_on_subagent"`, and only then. The same value as `SidebarChatRow.waitingOn`. */
@@ -2737,7 +2752,7 @@ export interface ResolvedChatReadAnchor {
 
 export interface PendingToolSnapshot {
   toolUseId: string
-  toolKind: "ask_user_question" | "exit_plan_mode"
+  toolKind: "ask_user_question" | "exit_plan_mode" | "request_secrets"
   /** One line of what the tool is asking; see `SidebarChatRow.pendingUserInputPreview`. */
   preview?: string
 }

@@ -1,4 +1,3 @@
-import { isSubChat } from "../../shared/sub-chat"
 import { projectDelegators } from "./delegators"
 import type { SidebarThread } from "./thread-sections"
 
@@ -94,7 +93,7 @@ export function resolveProjectNewChat(args: {
   const newChat = resolveDraftedNewChat(projectId, projectThreads, isListed, drafts, startedChats, startingChatIds)
   // Most recently active first, so the first of the last viewed wins a tie
   // and the most active stands in when none has been viewed here.
-  const delegators = projectDelegators(projectThreads as SidebarThread[], projectId).filter((thread) => !isSubChat(thread.row))
+  const delegators = projectDelegators(projectThreads as SidebarThread[], projectId).filter((thread) => !thread.row.hidden)
   if (delegators.length > 0) {
     let delegator = delegators[0]!
     for (const candidate of delegators) {
@@ -127,7 +126,7 @@ function resolveDraftedNewChat(
   for (const thread of projectThreads) {
     listedHere.add(thread.chatId)
     const chat = thread.row
-    if (thread.archived || chat.lastMessageAt != null || chat.delegator || isSubChat(chat)) continue
+    if (thread.archived || chat.lastMessageAt != null || chat.delegator || chat.hidden) continue
     consider(chat.chatId, { kind: "open", chatId: chat.chatId }, true)
   }
 

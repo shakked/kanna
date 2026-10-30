@@ -38,6 +38,7 @@ function withSidebarGroupDefaults(group: {
     lastMessageAt?: number
     canFork?: boolean
     hasAutomation: boolean
+    hidden?: boolean
   }>
 }) {
   return {
@@ -111,7 +112,6 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
       model: "claude-opus-4-8",
       modelOptions: {
         reasoningEffort: "high",
-        contextWindow: "1m",
         fastMode: false,
       },
       planMode: false,
@@ -1668,6 +1668,7 @@ describe("ws-router", () => {
               localPath: "/tmp/project",
               provider: null,
               hasAutomation: false,
+              hidden: false,
             }],
           })],
         },
@@ -1694,6 +1695,7 @@ describe("ws-router", () => {
               localPath: "/tmp/project",
               provider: null,
               hasAutomation: false,
+              hidden: false,
             }],
           })],
         },
@@ -1964,6 +1966,7 @@ describe("ws-router", () => {
               provider: "claude",
               canFork: true,
               hasAutomation: false,
+              hidden: false,
             }, {
               _id: "chat-1",
               _creationTime: 1,
@@ -1975,6 +1978,7 @@ describe("ws-router", () => {
               provider: "claude",
               canFork: true,
               hasAutomation: false,
+              hidden: false,
             }],
           })],
         },

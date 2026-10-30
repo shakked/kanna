@@ -2320,3 +2320,169 @@ describe("the tools", () => {
     expect(store.getQueuedMessages(root)).toHaveLength(1)
   })
 })
+
+describe("sidebar visibility", () => {
+  /** A delegator the user made, with a turn open in it. */
+  async function delegatorChat(context: Awaited<ReturnType<typeof setup>>) {
+    const { store, project, agent, codex } = context
+    const chat = await store.createChat(project.id, undefined, { delegator: true })
+    await agent.send({ type: "chat.send", chatId: chat.id, provider: "codex", content: "ship the release" })
+    await until(() => codex.turnsFor(chat.id).length === 1, "the delegator's turn")
+    return chat.id
+  }
+
+  /** A chat the user started whose turn has ended with a session, so it can be forked. */
+  async function forkable(context: Awaited<ReturnType<typeof setup>>, content = "something to fork") {
+    const { codex, orchestrator, userChat } = context
+    const chatId = await userChat(content)
+    codex.turn(chatId).events.push({ type: "session_token", sessionToken: `thread-${chatId}` })
+    codex.finish(chatId, "done")
+    await until(() => orchestrator.readChat({ chatId }).chat.status === "completed", "the source's turn")
+    return chatId
+  }
+
+  function hidden(context: Awaited<ReturnType<typeof setup>>, chatId: string) {
+    const { store, agent } = context
+    const row = deriveSidebarData(store.state, agent.getChatStatuses()).projectGroups[0]!.chats.find((chat) => chat.chatId === chatId)!
+    // The record, the row and the lists all say the same.
+    expect(row.hidden).toBe(Boolean(store.getChat(chatId)!.hidden))
+    return row.hidden
+  }
+
+  test("each way a chat comes to be gets the place it had before the field", async () => {
+    const context = await setup()
+    const { orchestrator, store, project, agent, userChat } = context
+    const commands = createChatCommands({ store, agent, analytics: NoopAnalyticsReporter })
+    const root = await userChat()
+
+    // The user's own: the store, the command the client sends, a fork from the UI.
+    expect(hidden(context, root)).toBe(false)
+    expect(hidden(context, (await commands.create(project.id)).result.chatId)).toBe(false)
+    const source = await forkable(context)
+    expect(hidden(context, (await commands.fork(source)).result.chatId)).toBe(false)
+
+    // An agent's: a sub-chat by default, a separate chat on request.
+    expect(hidden(context, (await orchestrator.createChat(root, { message: "audit" })).chatId)).toBe(true)
+    expect(hidden(context, (await orchestrator.createChat(root, { message: "separate", subchat: false })).chatId)).toBe(false)
+    // A fork handed work reports back, so it is hidden; one left idle, or made separate, is listed.
+    expect(hidden(context, (await orchestrator.forkChat(root, { chatId: source, message: "go on", title: "Go on" })).chatId)).toBe(true)
+    expect(hidden(context, (await orchestrator.forkChat(root, { chatId: source, title: "Idle copy" })).chatId)).toBe(false)
+    expect(hidden(context, (await orchestrator.forkChat(root, { chatId: source, message: "go on", title: "Mine", subchat: false })).chatId)).toBe(false)
+
+    // A delegator's, whatever it passes about the parent.
+    const delegator = await delegatorChat(context)
+    expect(hidden(context, (await orchestrator.createChat(delegator, { message: "work", subchat: false })).chatId)).toBe(true)
+    expect(hidden(context, (await orchestrator.forkChat(delegator, { chatId: source, title: "Copy", subchat: false })).chatId)).toBe(true)
+  })
+
+  test("adopting keeps a listed chat listed and lists a hidden one, as the parent rule did", async () => {
+    const context = await setup()
+    const { orchestrator, store, codex, userChat } = context
+    const root = await userChat()
+    const other = await userChat("something else")
+    const elsewhere = await userChat("a third thing")
+    const theirs = await orchestrator.createChat(elsewhere, { message: "work" })
+    expect(hidden(context, theirs.chatId)).toBe(true)
+
+    await orchestrator.sendMessage(root, { chatId: other, message: "rebase", title: "Rebase", adopt: true })
+    expect(store.getChat(other)).toMatchObject({ parentChatId: root, adopted: true })
+    expect(hidden(context, other)).toBe(false)
+
+    // A failed adoption puts it back under the parent that started it, hidden again.
+    codex.finish(theirs.chatId, "done")
+    await until(() => store.getQueuedMessages(elsewhere).length === 1, "the sub-chat's report")
+    const startTurn = codex.startTurn.bind(codex)
+    codex.startTurn = async () => { throw new Error("provider is down") }
+    await expect(orchestrator.sendMessage(root, { chatId: theirs.chatId, message: "hi", title: "Work", adopt: true })).rejects.toThrow("did not start")
+    codex.startTurn = startTurn
+    expect(store.getChat(theirs.chatId)).toMatchObject({ parentChatId: elsewhere })
+    expect(hidden(context, theirs.chatId)).toBe(true)
+
+    await orchestrator.sendMessage(root, { chatId: theirs.chatId, message: "report to me", title: "Work", adopt: true })
+    expect(hidden(context, theirs.chatId)).toBe(false)
+  })
+
+  test("showInSidebar lists a sub-chat that still reports to its parent, a delegator's included", async () => {
+    const context = await setup()
+    const { orchestrator, store, codex, userChat } = context
+    const root = await userChat()
+    const listed = await orchestrator.createChat(root, { message: "audit", showInSidebar: true })
+    expect(listed).toMatchObject({ parentChatId: root })
+    expect(listed).not.toHaveProperty("hidden")
+    expect(hidden(context, listed.chatId)).toBe(false)
+    expect(store.getChat(listed.chatId)).toMatchObject({ reportOwed: true })
+    const source = await forkable(context)
+    expect(hidden(context, (await orchestrator.forkChat(root, { chatId: source, message: "go on", title: "Go on", showInSidebar: true })).chatId)).toBe(false)
+
+    // A chat with no parent has to be listed: nothing else would show it.
+    await expect(orchestrator.createChat(root, { message: "x", subchat: false, showInSidebar: false })).rejects.toThrow("has to be in the sidebar")
+    await expect(orchestrator.forkChat(root, { chatId: source, title: "x", showInSidebar: false })).rejects.toThrow("has to be in the sidebar")
+
+    const delegator = await delegatorChat(context)
+    const visible = await orchestrator.createChat(delegator, { message: "churn risk", title: "Churn risk", showInSidebar: true })
+    expect(visible).toMatchObject({ parentChatId: delegator })
+    expect(hidden(context, visible.chatId)).toBe(false)
+    // Still the delegator's: it reports there.
+    codex.finish(visible.chatId, "Three accounts at risk.")
+    await until(() => store.getQueuedMessages(delegator).length === 1, "the report")
+    expect(store.getQueuedMessages(delegator)[0]).toMatchObject({ source: { kind: "report", chatIds: [visible.chatId] } })
+  })
+
+  test("send_message shows or hides the sender's own sub-chats, and only those", async () => {
+    const context = await setup()
+    const { orchestrator, store, codex, userChat, prompts } = context
+    const delegator = await delegatorChat(context)
+    const churn = await orchestrator.createChat(delegator, { message: "churn risk", title: "Churn risk" })
+    expect(hidden(context, churn.chatId)).toBe(true)
+    codex.finish(churn.chatId, "done")
+    await until(() => orchestrator.readChat({ chatId: churn.chatId }).chat.status === "completed")
+
+    // Detached into the sidebar, still the delegator's.
+    await orchestrator.sendMessage(delegator, { chatId: churn.chatId, message: "keep going", title: "Churn risk", showInSidebar: true })
+    expect(hidden(context, churn.chatId)).toBe(false)
+    expect(store.getChat(churn.chatId)).toMatchObject({ parentChatId: delegator })
+    codex.finish(churn.chatId, "done again")
+    await until(() => orchestrator.readChat({ chatId: churn.chatId }).chat.status === "completed")
+    await orchestrator.sendMessage(delegator, { chatId: churn.chatId, message: "tidy up", title: "Churn risk", showInSidebar: false })
+    expect(hidden(context, churn.chatId)).toBe(true)
+
+    // Not a chat of its own: refused before anything is sent.
+    const root = await userChat()
+    const other = await forkable(context, "the user's own")
+    const before = prompts(other).length
+    await expect(orchestrator.sendMessage(root, { chatId: other, message: "hi", title: "Theirs", showInSidebar: false })).rejects.toThrow("only for a sub-chat of this chat")
+    expect(prompts(other)).toHaveLength(before)
+    expect(hidden(context, other)).toBe(false)
+    // Adopted in the same call, it is one.
+    await orchestrator.sendMessage(root, { chatId: other, message: "hi", title: "Theirs", adopt: true, showInSidebar: false })
+    expect(store.getChat(other)).toMatchObject({ parentChatId: root, adopted: true })
+    expect(hidden(context, other)).toBe(true)
+  })
+
+  test("the tools take showInSidebar on create, fork and send", async () => {
+    const context = await setup()
+    const { orchestrator, store, userChat } = context
+    const root = await userChat()
+    const runtime = new KannaToolRuntime({
+      chatId: root,
+      cwd: "/tmp",
+      emit: async () => {},
+      requestInput: async () => ({}),
+      orchestration: orchestrator,
+    })
+    const call = async (name: string, input: unknown) => {
+      const result = await runtime.execute(name, input)
+      return result.isError ? { error: result.content[0]!.text } : JSON.parse(result.content[0]!.text)
+    }
+    const created = await call("create_chat", { message: "audit", title: "Audit", showInSidebar: true })
+    expect(store.getChat(created.chatId)).toMatchObject({ parentChatId: root })
+    expect(store.getChat(created.chatId)).not.toHaveProperty("hidden")
+    const source = await forkable(context)
+    const forked = await call("fork_chat", { chatId: source, message: "go on", title: "Go on", showInSidebar: true })
+    expect(store.getChat(forked.chatId)).not.toHaveProperty("hidden")
+    await call("send_message", { chatId: created.chatId, message: "more", title: "Audit", showInSidebar: false })
+    expect(store.getChat(created.chatId)?.hidden).toBe(true)
+    expect(await call("send_message", { chatId: source, message: "hi", title: "x", showInSidebar: true })).toMatchObject({ error: expect.stringContaining("adopt") })
+    runtime.abort()
+  })
+})

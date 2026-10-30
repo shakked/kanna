@@ -58,6 +58,7 @@ interface ChatCommandsDeps {
     | "setChatDoneState"
   >
   agent: Pick<AgentCoordinator, "send" | "enqueue" | "steer" | "dequeue" | "cancel" | "closeChat" | "forkChat">
+    & Partial<Pick<AgentCoordinator, "closeIdleSession">>
   analytics: AnalyticsReporter
 }
 
@@ -70,7 +71,7 @@ export function createChatCommands({ store, agent, analytics }: ChatCommandsDeps
     async create(
       projectId: string,
       lineage?: ChatLineage,
-      options?: { delegator?: boolean; chatId?: string },
+      options?: { delegator?: boolean; chatId?: string; hidden?: boolean },
     ): Promise<ChatCommandOutcome<{ chatId: string }>> {
       const chat = await store.createChat(projectId, lineage, options)
       // The count is of chats people start.
@@ -82,8 +83,8 @@ export function createChatCommands({ store, agent, analytics }: ChatCommandsDeps
       }
     },
 
-    async fork(chatId: string, lineage?: ChatLineage): Promise<ChatCommandOutcome<{ chatId: string }>> {
-      const result = await agent.forkChat(chatId, lineage)
+    async fork(chatId: string, lineage?: ChatLineage, options?: { hidden?: boolean }): Promise<ChatCommandOutcome<{ chatId: string }>> {
+      const result = await agent.forkChat(chatId, lineage, options)
       return { result, changed: { sidebar: true, localProjects: true } }
     },
 
@@ -120,6 +121,9 @@ export function createChatCommands({ store, agent, analytics }: ChatCommandsDeps
         await store.deleteChat(chatId)
       } else {
         await store.archiveChat(chatId)
+        // Put away: free its agent process now rather than at the idle
+        // timeout, unless something is still running in it.
+        await agent.closeIdleSession?.(chatId, "archived")
       }
       return {
         result: undefined,
@@ -160,6 +164,7 @@ export function createChatCommands({ store, agent, analytics }: ChatCommandsDeps
 
     async setDone(chatId: string, done: boolean): Promise<ChatCommandOutcome> {
       await store.setChatDoneState(chatId, done)
+      if (done) await agent.closeIdleSession?.(chatId, "done")
       return { result: undefined, changed: chatAndSidebar(chatId) }
     },
 

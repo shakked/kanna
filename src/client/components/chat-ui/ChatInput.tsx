@@ -10,6 +10,7 @@ import {
   type ModelOptions,
   type ProviderCatalogEntry,
   resolveClaudeContextWindowMaxTokens,
+  type UsageLimitsSnapshot,
 } from "../../../shared/types"
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
@@ -21,7 +22,7 @@ import { useVoiceRecorder } from "../../hooks/useVoiceRecorder"
 import { RecordingWaveform } from "./RecordingWaveform"
 import { useShallow } from "zustand/react/shallow"
 import { useChatInputStore } from "../../stores/chatInputStore"
-import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../../stores/chatPreferencesStore"
+import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../../stores/chatPreferencesStore"
 import { ATTACH_FILES_EVENT, CHAT_INPUT_ATTRIBUTE, focusNextChatInput, REQUEST_ATTACH_FILES_EVENT } from "../../app/chatFocusPolicy"
 import { isEscapeClaimed, isViewerPaneOpen, resolveEscapePress } from "../../lib/escape-key"
 import { HoldToStopHint, HoldToStopRing, useHoldToStop } from "./HoldToStop"
@@ -34,9 +35,11 @@ import { shouldSteerSubmit } from "../../../shared/submit-mode"
 import { SignInDialog } from "../auth/SignInDialog"
 import { ChatPreferenceControls } from "./ChatPreferenceControls"
 import { ContextWindowMeter } from "./ContextWindowMeter"
+import { ComposerUsageBar } from "./ComposerUsageBar"
+import { selectComposerUsage } from "../../lib/composerUsage"
 import { AttachmentFileCard, AttachmentImageCard } from "../messages/AttachmentCard"
-import { classifyAttachmentPreview } from "../messages/attachmentPreview"
-import { getChatViewer, openViewer, useViewerStore, viewerAttachmentFromChat } from "../../stores/viewerStore"
+import { getChatViewer, useViewerStore, viewerAttachmentFromChat } from "../../stores/viewerStore"
+import { activateAttachment } from "../viewer/attachmentActions"
 import { overrideContextWindowMaxTokens, type ContextWindowSnapshot } from "../../lib/contextWindow"
 import {
   applySkillCompletion,
@@ -202,6 +205,8 @@ interface Props {
   activeProvider: AgentProvider | null
   availableProviders: ProviderCatalogEntry[]
   contextWindowSnapshot?: ContextWindowSnapshot | null
+  /** Plan usage for every provider; the composer shows the selected one's. */
+  usageLimits?: UsageLimitsSnapshot | null
   previousPrompt?: string | null
   onEditModels?: () => void
   /** Enumerates the selected harness's invocable skills for the "/" menu. */
@@ -251,6 +256,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   activeProvider,
   availableProviders,
   contextWindowSnapshot = null,
+  usageLimits = null,
   previousPrompt = null,
   onEditModels,
   onListSkills,
@@ -343,13 +349,34 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
       return contextWindowSnapshot
     }
 
-    const claudeModelOptions = providerPrefs.modelOptions as Extract<ComposerState, { provider: "claude" }>["modelOptions"]
-    const stagedMaxTokens = resolveClaudeContextWindowMaxTokens(
-      providerPrefs.model,
-      claudeModelOptions.contextWindow,
-    )
-    return overrideContextWindowMaxTokens(contextWindowSnapshot, stagedMaxTokens)
-  }, [contextWindowSnapshot, providerPrefs.model, providerPrefs.modelOptions, providerPrefs.provider])
+    return overrideContextWindowMaxTokens(contextWindowSnapshot, resolveClaudeContextWindowMaxTokens(providerPrefs.model))
+  }, [contextWindowSnapshot, providerPrefs.model, providerPrefs.provider])
+  const composerUsage = useMemo(
+    () => selectComposerUsage(usageLimits, providerPrefs.provider, providerPrefs.model),
+    [usageLimits, providerPrefs.model, providerPrefs.provider],
+  )
+  // Free px left of the centred controls, for the pinned usage bar. Worked out
+  // from widths (half of what the controls leave), not positions, so the bar
+  // falling back into the row can't move the controls and flip it back.
+  const controlsRowRef = useRef<HTMLDivElement>(null)
+  const preferenceControlsRef = useRef<HTMLDivElement>(null)
+  const [usageRoom, setUsageRoom] = useState<number | null>(null)
+  const [pinnedUsageFits, setPinnedUsageFits] = useState(true)
+  const hasComposerUsage = composerUsage !== null
+  useLayoutEffect(() => {
+    const row = controlsRowRef.current
+    const controls = preferenceControlsRef.current
+    if (!hasComposerUsage || !row || !controls || typeof ResizeObserver === "undefined") return
+    const measure = () => {
+      // left-[13px] inset, then 8px clear of the first control.
+      setUsageRoom(Math.floor((row.clientWidth - controls.scrollWidth) / 2) - 13 - 8)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(row)
+    observer.observe(controls)
+    return () => observer.disconnect()
+  }, [hasComposerUsage])
   // "/" skill menu derivations. The mention is non-null only while the caret
   // is inside a "/token" anywhere in the prompt ("$token" also opens it on
   // codex, whose native sigil is "$" — accepting still completes to the
@@ -1082,15 +1109,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   }
 
   function handleAttachmentPreview(attachment: ComposerAttachment) {
-    const target = classifyAttachmentPreview(attachment)
-    if (target.openInNewTab) {
-      if (typeof window !== "undefined") {
-        window.open(new URL(attachment.contentUrl, window.location.origin).toString(), "_blank", "noopener,noreferrer")
-      }
-      return
-    }
-
-    openViewer({ kind: "attachment", attachment: viewerAttachmentFromChat(attachment) })
+    activateAttachment(viewerAttachmentFromChat(attachment))
   }
 
   function removeAttachment(attachment: ComposerAttachment) {
@@ -1359,7 +1378,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
         controlsScrollSpacer), so the net gutter is unchanged but content can
         scroll under the edge.
       */}
-      <div className={cn("relative py-3 max-w-[840px] mx-auto", isStandalone && "pt-3 pb-5")}>
+      <div ref={controlsRowRef} className={cn("relative py-3 max-w-[840px] mx-auto", isStandalone && "pt-3 pb-5")}>
         <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-row">
           <div className={controlsScrollSpacer} />
           <label
@@ -1410,9 +1429,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 case "piReasoningEffort":
                   composer.setReasoningEffort(change.effort)
                   break
-                case "contextWindow":
-                  composer.setContextWindow(change.contextWindow)
-                  break
                 case "fastMode":
                   composer.setFastMode(change.fastMode)
                   break
@@ -1424,7 +1440,20 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             includeMode={showModePicker}
             hideDefaults
             className="max-w-[840px] mx-auto"
+            rootRef={preferenceControlsRef}
           />
+          {/* Below lg the usage bar rides at the end of the row, beside the
+              dial, so appearing never pushes the controls before it. From md
+              the dial is pinned over the row's right edge; mr-9 clears it.
+              From lg it comes back here only when the pinned one can't fit
+              beside the controls (a narrow pane, e.g. with the delegator
+              sidebar open). */}
+          {composerUsage ? (
+            <ComposerUsageBar
+              rows={composerUsage}
+              className={cn("ml-2 self-center md:mr-9", pinnedUsageFits && "lg:hidden")}
+            />
+          ) : null}
           {activeContextWindow ? (
             <div className="mx-[13px] flex items-center gap-2 md:hidden">
               <ContextWindowMeter usage={activeContextWindow} />
@@ -1432,6 +1461,20 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
           ) : null}
           <div className={controlsScrollSpacer} />
         </div>
+
+        {/* The dial's mirror: pinned left, out of the centred row's flow, so
+            it can come and go (provider switch, first push) without moving
+            anything. Only from lg, where the row's centring leaves it room. */}
+        {composerUsage ? (
+          <div className={cn(
+            "absolute inset-y-0 left-[13px] hidden items-center lg:flex",
+            isStandalone ? "pt-3 pb-5" : "py-3",
+            // Kept mounted while it doesn't fit, so it can tell when it does.
+            !pinnedUsageFits && "invisible",
+          )}>
+            <ComposerUsageBar rows={composerUsage} room={usageRoom} onFitChange={setPinnedUsageFits} />
+          </div>
+        ) : null}
 
         {/* right-[17px] is where the dial has always sat: right-[29px]
             pulled back by translate-x-1/2 of its own 24px. */}

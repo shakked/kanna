@@ -18,6 +18,7 @@ import type {
   StandaloneTranscriptExportResult,
   UpdateSnapshot,
   UsageLimitsSnapshot,
+  ChatCpuSnapshot,
   EditorPreset,
   TerminalPreset,
 } from "./types"
@@ -62,6 +63,8 @@ export type SubscriptionTopic =
   | { type: "keybindings" }
   | { type: "app-settings" }
   | { type: "usage-limits" }
+  /** Per-chat CPU, sampled only while someone holds this subscription. */
+  | { type: "chat-cpu" }
   | { type: "provider-auth" }
   | {
     type: "chat"
@@ -335,6 +338,19 @@ export type ClientCommand =
       attachmentMode: StandaloneTranscriptAttachmentMode
     }
   | { type: "chat.respondTool"; chatId: string; toolUseId: string; result: unknown }
+  /**
+   * Answers a pending `request_secrets` call (`chat.respondTool` refuses one).
+   * `values` is keyed by field key; a key left out or empty is skipped, which
+   * only an optional field may be. `cancel` saves nothing. Acks with the
+   * call's `RequestSecretsToolResult`: names only. See shared/secrets.ts.
+   */
+  | { type: "secrets.submit"; chatId: string; toolUseId: string; values?: Record<string, string>; cancel?: boolean }
+  /** Acks with `SecretsListResult`. */
+  | { type: "secrets.list" }
+  /** Adds or replaces one secret from Settings. Acks with `SecretsListResult`. */
+  | { type: "secrets.set"; projectId: string; key: string; value: string }
+  /** Acks with `SecretsListResult`. */
+  | { type: "secrets.delete"; projectId: string; key: string }
   | {
       type: "message.enqueue"
       chatId: string
@@ -386,6 +402,7 @@ export type ServerSnapshot =
   | { type: "keybindings"; data: KeybindingsSnapshot }
   | { type: "app-settings"; data: AppSettingsSnapshot }
   | { type: "usage-limits"; data: UsageLimitsSnapshot }
+  | { type: "chat-cpu"; data: ChatCpuSnapshot }
   | { type: "provider-auth"; data: ProviderAuthSnapshot }
   | { type: "llm-provider"; data: LlmProviderSnapshot }
   | { type: "chat"; data: ChatSnapshot | null }

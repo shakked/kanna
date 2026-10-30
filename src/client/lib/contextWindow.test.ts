@@ -40,11 +40,15 @@ describe("deriveLatestContextWindowSnapshot", () => {
   test("a harness switch resets the meter: only usage after the last handoff boundary counts", () => {
     // Usage (and compaction signals) from the old provider's session don't
     // describe the new session's context window.
-    expect(deriveLatestContextWindowSnapshot([
+    // Until the new session reports, the meter shows empty rather than vanishing.
+    const beforeFirstReport = deriveLatestContextWindowSnapshot([
       entry({ kind: "compact_boundary" }, 1),
       entry({ kind: "context_window_updated", usage: { usedTokens: 999, compactsAutomatically: false } }, 2),
       entry({ kind: "handoff_boundary", fromProvider: "claude", toProvider: "codex" }, 3),
-    ])).toBeNull()
+    ])
+    expect(beforeFirstReport?.usedTokens).toBe(0)
+    expect(beforeFirstReport?.maxTokens).toBeUndefined()
+    expect(beforeFirstReport?.compactsAutomatically).toBe(false)
 
     const afterSwitch = deriveLatestContextWindowSnapshot([
       entry({ kind: "compact_boundary" }, 1),
@@ -62,6 +66,11 @@ describe("deriveLatestContextWindowSnapshot", () => {
     expect(deriveLatestContextWindowSnapshot([
       entry({ kind: "context_window_updated", usage: { usedTokens: 999, compactsAutomatically: false } }, 1),
       entry({ kind: "session_restored", provider: "claude" }, 2),
+    ])?.usedTokens).toBe(0)
+
+    // A boundary with no earlier usage is still "no data yet".
+    expect(deriveLatestContextWindowSnapshot([
+      entry({ kind: "session_restored", provider: "claude" }, 1),
     ])).toBeNull()
 
     const afterRestore = deriveLatestContextWindowSnapshot([

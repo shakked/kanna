@@ -7,15 +7,19 @@ import type { AgentProvider } from "../../../../shared/types"
 import { PROVIDER_ICONS } from "../../provider-icons"
 import { UsageBar } from "../UsageBar"
 
-/** The harnesses whose plan usage the sidebar lists, in order. */
-const USAGE_PROVIDERS: ReadonlyArray<{ provider: AgentProvider; title: string }> = [
-  { provider: "claude", title: "Claude" },
-  { provider: "codex", title: "Codex" },
-]
+/** Short block titles; the catalog labels ("Claude Code") are too wide here. */
+const USAGE_TITLES: Record<AgentProvider, string> = {
+  claude: "Claude",
+  codex: "Codex",
+  cursor: "Cursor",
+  grok: "Grok",
+  pi: "Pi",
+}
 
 /**
- * Plan usage for Claude and Codex at the foot of the sidebar, above the
- * machine switcher: one block per provider, each with its icon. The sidebar
+ * Plan usage at the foot of the sidebar, above the machine switcher: one
+ * block per provider in the usage snapshot (server order), each with its
+ * icon. The sidebar
  * isn't tied to a chat, so there is no model to narrow by: each shows the
  * limits every model shares. A provider with nothing to report is left out,
  * and with none the whole block is. Display-only; a click opens Usage.
@@ -25,9 +29,9 @@ export function SidebarUsage({ socket }: { socket: KannaSocket }) {
   const usageResetDay = useAppSettingsStore((store) => store.settings?.usageResetDay)
   const blocks = useMemo(() => {
     const now = Date.now()
-    return USAGE_PROVIDERS.flatMap(({ provider, title }) => {
+    return (snapshot?.providers ?? []).flatMap(({ provider }) => {
       const rows = selectComposerUsage(snapshot, provider, null, now, usageResetDay)
-      return rows ? [{ provider, title, rows }] : []
+      return rows ? [{ provider, title: USAGE_TITLES[provider], rows }] : []
     })
   }, [snapshot, usageResetDay])
 

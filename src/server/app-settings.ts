@@ -75,6 +75,7 @@ interface AppSettingsFile {
   newSidebarEnabled?: unknown
   projectIconsInChats?: unknown
   delegatorMode?: unknown
+  tokenSaverEnabled?: unknown
   chatTabsEnabled?: unknown
   widgetsPeekEnabled?: unknown
   sidebarUsageEnabled?: unknown
@@ -212,6 +213,7 @@ function toFilePayload(state: AppSettingsState) {
     newSidebarEnabled: state.newSidebarEnabled,
     ...(state.projectIconsInChats === false ? { projectIconsInChats: false } : {}),
     ...(state.delegatorMode === false ? { delegatorMode: false } : {}),
+    ...(state.tokenSaverEnabled === true ? { tokenSaverEnabled: true } : {}),
     ...(state.chatTabsEnabled === true ? { chatTabsEnabled: true } : {}),
     ...(state.widgetsPeekEnabled === true ? { widgetsPeekEnabled: true } : {}),
     ...(state.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
@@ -249,6 +251,7 @@ function toSnapshot(
     newSidebarEnabled: state.newSidebarEnabled,
     ...(state.projectIconsInChats === false ? { projectIconsInChats: false } : {}),
     ...(state.delegatorMode === false ? { delegatorMode: false } : {}),
+    ...(state.tokenSaverEnabled === true ? { tokenSaverEnabled: true } : {}),
     ...(state.chatTabsEnabled === true ? { chatTabsEnabled: true } : {}),
     ...(state.widgetsPeekEnabled === true ? { widgetsPeekEnabled: true } : {}),
     ...(state.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
@@ -356,6 +359,7 @@ function normalizeAppSettings(
     newSidebarEnabled,
     ...(source?.projectIconsInChats === false ? { projectIconsInChats: false } : {}),
     ...(source?.delegatorMode === false ? { delegatorMode: false } : {}),
+    ...(source?.tokenSaverEnabled === true ? { tokenSaverEnabled: true } : {}),
     ...(source?.chatTabsEnabled === true ? { chatTabsEnabled: true } : {}),
     ...(source?.widgetsPeekEnabled === true ? { widgetsPeekEnabled: true } : {}),
     ...(source?.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
@@ -404,6 +408,7 @@ function toComparablePayload(source: AppSettingsFile) {
     newSidebarEnabled: source.newSidebarEnabled,
     projectIconsInChats: source.projectIconsInChats,
     delegatorMode: source.delegatorMode,
+    tokenSaverEnabled: source.tokenSaverEnabled,
     chatTabsEnabled: source.chatTabsEnabled,
     widgetsPeekEnabled: source.widgetsPeekEnabled,
     sidebarUsageEnabled: source.sidebarUsageEnabled,

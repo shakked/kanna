@@ -1431,6 +1431,12 @@ export interface AppSettingsSnapshot {
    */
   delegatorMode?: boolean
   /**
+   * Token Saver Mode: a delegator's agent is told how freely each provider's
+   * plan can be spent (from usage and time to reset) and routes sub-chats by
+   * it. Off unless true, and absent when off.
+   */
+  tokenSaverEnabled?: boolean
+  /**
    * Show the chats you have open as tabs in the chat's title bar, in place of
    * the one chat's title. Off unless true, and absent when off. The tabs
    * themselves are each browser's own; this is only whether to show them.
@@ -1505,6 +1511,7 @@ export interface AppSettingsPatch {
   newSidebarEnabled?: boolean
   projectIconsInChats?: boolean
   delegatorMode?: boolean
+  tokenSaverEnabled?: boolean
   chatTabsEnabled?: boolean
   widgetsPeekEnabled?: boolean
   sidebarUsageEnabled?: boolean

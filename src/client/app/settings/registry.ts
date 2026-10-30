@@ -166,6 +166,12 @@ export const SETTINGS_ROWS = defineRows({
     description: "New chats hand their work to sub-chats and report back. Only affects chats created from now on; each chat's menu can still switch it.",
     keywords: ["delegator", "delegate", "delegation", "sub-chats", "subchats", "hand off", "orchestrate", "coordinate", "work directly"],
   },
+  tokenSaver: {
+    sectionId: "general",
+    title: "Token Saver Mode",
+    description: "Delegators weigh each provider's remaining plan usage and time to reset when choosing a provider, model and effort for sub-chats. Only affects delegator chats.",
+    keywords: ["token saver", "tokens", "efficiency", "budget", "usage", "plan", "limits", "route", "model", "conserve", "spend", "delegator"],
+  },
   submitWhileRunning: {
     sectionId: "general",
     title: "Enter While Running",

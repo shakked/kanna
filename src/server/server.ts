@@ -330,6 +330,16 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       void router.broadcastChatChange(change)
     },
     onError: (message) => console.warn(`${LOG_PREFIX} ${message}`),
+    tokenSaver: () => {
+      const settings = appSettings.getSnapshot()
+      return {
+        enabled: settings.tokenSaverEnabled === true,
+        delegatorMode: settings.delegatorMode !== false,
+        usageResetDay: settings.usageResetDay,
+        snapshot: usageLimits.getSnapshot(),
+        refreshUsage: () => void usageLimits.refresh().catch(() => undefined),
+      }
+    },
   })
   agent.orchestration = orchestrator
   agent.onChatSettled = (chatId) => orchestrator.handleChatSettled(chatId)

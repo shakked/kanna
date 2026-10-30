@@ -26,9 +26,10 @@ function formatResetDate(iso: string): string {
 }
 
 /** The first column: the window's short name, or for a spend cap its reset countdown. */
-function rowLead({ shortLabel, credits, assumedResetsAt }: ComposerUsageRow): string {
+function rowLead({ shortLabel, credits, resetsAt, assumedResetsAt }: ComposerUsageRow): string {
   if (!credits) return shortLabel
-  return (assumedResetsAt && formatResetCountdown(assumedResetsAt)) || ""
+  const reset = resetsAt ?? assumedResetsAt
+  return (reset && formatResetCountdown(reset)) || ""
 }
 
 /** The fourth column: the reset countdown, or for a spend cap what's left. */
@@ -36,8 +37,8 @@ function rowTail({ window, credits }: ComposerUsageRow): string | null {
   return credits ? creditsLeft(credits) : formatResetCountdown(window.resetsAt)
 }
 
-function fillColorClass(usedPercent: number): string {
-  if (usedPercent >= 90) return "bg-red-500"
+function fillColorClass(usedPercent: number, limitReached: boolean): string {
+  if (limitReached || usedPercent >= 90) return "bg-red-500"
   if (usedPercent >= 75) return "bg-amber-500"
   return "bg-muted-foreground"
 }
@@ -74,7 +75,7 @@ function UsageRows({ rows, showCountdown, labeled }: { rows: ComposerUsageRow[];
         {labeled ? <span className="whitespace-nowrap tabular-nums">{rowLead(row)}</span> : null}
         <span className="h-[3px] overflow-hidden rounded-full bg-muted-foreground/20" aria-hidden="true">
           <span
-            className={cn("block h-full rounded-full transition-[width] duration-500 ease-out", fillColorClass(usedPercent))}
+            className={cn("block h-full rounded-full transition-[width] duration-500 ease-out", fillColorClass(usedPercent, row.credits?.limitReached === true))}
             style={{ width: `${usedPercent > 0 ? Math.max(4, usedPercent) : 0}%` }}
           />
         </span>
@@ -169,9 +170,13 @@ export function ComposerUsageBar({
       </TooltipTrigger>
       <TooltipContent side="top" align="start" className="w-max max-w-none px-3 py-2">
         <div className="space-y-1.5 leading-tight">
-          {rows.map(({ window, credits, assumedResetsAt }) => {
+          {rows.map(({ window, credits, resetsAt: realResetsAt, assumedResetsAt }) => {
             const resets = window.resetsAt ? `Resets ${formatUntil(window.resetsAt)}` : null
-            const assumedReset = assumedResetsAt ? `Resets ${formatResetDate(assumedResetsAt)} (assumed)` : null
+            // A reported reset is stated plainly; Claude's is only assumed.
+            const assumedReset = realResetsAt
+              ? `Resets ${formatResetDate(realResetsAt)}`
+              : assumedResetsAt ? `Resets ${formatResetDate(assumedResetsAt)} (assumed)` : null
+            const reached = credits?.limitReached ? "Spend limit reached" : null
             const spent = credits ? creditsSpent(credits) : null
             // Pushed and refreshed reads are current; a cached one is from an
             // earlier session, so say how old it is.
@@ -179,7 +184,7 @@ export function ComposerUsageBar({
             // A window's reset and age share a line; a spend cap says what was
             // spent (and how old that is), then when it resets.
             const lines = credits
-              ? [[spent, stale], [assumedReset]]
+              ? [[reached], [spent, stale], [assumedReset]]
               : [[resets, stale]]
             return (
               <div key={window.id}>

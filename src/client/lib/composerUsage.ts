@@ -16,6 +16,8 @@ export interface ComposerUsageRow {
    * it never zeroes the percent when the assumed day passes.
    */
   assumedResetsAt?: string
+  /** The spend cap's real next reset, ISO 8601, when the provider reports it (Codex). */
+  resetsAt?: string
 }
 
 /** The next time the local clock reads midnight on `day` of a month, after `now`. */
@@ -45,6 +47,7 @@ function creditsRow(provider: AgentProvider, credits: UsageLimitCredits | null, 
     shortLabel: "",
     credits,
     ...(provider === "claude" ? { assumedResetsAt: nextMonthlyReset(resetDay, now) } : {}),
+    ...(credits.resetsAt ? { resetsAt: credits.resetsAt } : {}),
   }
 }
 

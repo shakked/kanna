@@ -1569,6 +1569,10 @@ export interface UsageLimitCredits {
   currency: string | null
   /** Free-form fallback description when amounts aren't numeric (e.g. "Unlimited"). */
   detail: string | null
+  /** The cap's real next reset, ISO 8601, when the provider reports one (Codex). Claude's is assumed client-side. */
+  resetsAt?: string | null
+  /** The provider says the cap is hit, whatever the percent reads. */
+  limitReached?: boolean
   recordedAt: string
   source: UsageLimitSource
 }

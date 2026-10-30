@@ -52,7 +52,6 @@ export interface EfficiencyContext {
   note?: string
   summary?: string
   providers?: ProviderEfficiency[]
-  guidance?: string[]
 }
 
 /** A model whose id or label says it is the small, cheap one of its family. */
@@ -138,18 +137,6 @@ function providerEfficiency(posture: ProviderPosture, catalog: ProviderCatalogEn
   }
 }
 
-/**
- * How to read the block, in the block: the same text serves an agent that
- * never saw the delegator instructions (an older session) as well as one that
- * did.
- */
-const EFFICIENCY_GUIDANCE = [
-  "Posture says how freely each provider's plan can be spent now: spend (usage is behind the clock; headroom is there to use), balanced, conserve (usage is ahead of the clock), critical (nearly out), unknown (no fresh reading: never assume unlimited).",
-  "Judge each piece of work first: light (a lookup, a mechanical edit, a narrow check), standard (a scoped change, ordinary debugging, review), deep (architecture, ambiguous multi-file debugging, security-sensitive reasoning). Then take that tier's model and effort from the provider you pick, and pass them to create_chat, fork_chat or send_message.",
-  "Between providers, prefer the one with more headroom (spend over balanced over conserve), and keep the one the work suits when they are close. Prefer a provider with a known healthy budget to an unknown one, but an unknown one is a fine fallback. When both are unknown, use this chat's own provider at standard.",
-  "Under conserve or critical, lower the tier or effort for routine pieces and avoid starting extra sub-chats: each one pays its own overhead. Never put a hard task on a light model to save tokens.",
-]
-
 /** What the orchestrator needs to read Token Saver Mode's inputs when it is asked. */
 export interface TokenSaverSource {
   /** The Token Saver Mode setting. */
@@ -185,7 +172,6 @@ export function buildEfficiencyContext(inputs: EfficiencyInputs): EfficiencyCont
     ...(inputs.delegatorMode ? {} : { note: "Delegator Mode is off, so Token Saver Mode only affects delegator chats that already exist." }),
     summary: formatTokenPostureSummary(postures),
     providers,
-    guidance: EFFICIENCY_GUIDANCE,
   }
 }
 

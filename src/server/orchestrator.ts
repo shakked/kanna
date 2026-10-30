@@ -16,7 +16,7 @@ import type { ChatChange, ChatCommands } from "./chat-commands"
 import type { EventStore } from "./event-store"
 import type { ChatRecord } from "./events"
 import { renderToolResultContent } from "./handoff"
-import { getServerProviderCatalog, normalizeServerModel, SERVER_PROVIDERS } from "./provider-catalog"
+import { compactModelIds, getServerProviderCatalog, normalizeServerModel, SERVER_PROVIDERS } from "./provider-catalog"
 import { buildEfficiencyContext, buildTokenSaverNotice, type TokenSaverSource } from "./token-efficiency"
 import {
   computeFirstRun,
@@ -833,7 +833,7 @@ export class ChatOrchestrator {
         provider: entry.id,
         label: entry.label,
         defaultModel: entry.defaultModel,
-        models: entry.models.map((model) => model.id),
+        models: entry.id === "cursor" ? compactModelIds(entry.models.map((model) => model.id)) : entry.models.map((model) => model.id),
         efforts: entry.efforts.map((effort) => effort.id),
         supportsPlanMode: entry.supportsPlanMode,
       })),

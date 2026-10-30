@@ -25,7 +25,7 @@ import { isAnalyticsDisabledByEnv, KannaAnalyticsReporter, NoopAnalyticsReporter
 import { AppSettingsManager } from "./app-settings"
 import { refreshInstalledEditors } from "./editor-detection"
 import { refreshInstalledTerminals } from "./terminal-detection"
-import { UsageLimitsManager } from "./usage-limits"
+import { UsageLimitsManager, fetchCursorUsage } from "./usage-limits"
 import { ChatCpuMonitor } from "./chat-cpu"
 import { DiffStore } from "./diff-store"
 import { WorktreeProbe } from "./worktree-probe"
@@ -338,6 +338,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     fetchClaudeUsage: () => agent.fetchClaudeUsage(),
     fetchCodexRateLimits: () => agent.fetchCodexRateLimits(),
     fetchGrokUsage: () => agent.fetchGrokUsage(),
+    fetchCursorUsage,
   })
   await usageLimits.initialize()
   agent.setClaudeRateLimitListener((info) => usageLimits.recordClaudeRateLimitPush(info))

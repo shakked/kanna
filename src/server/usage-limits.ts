@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
@@ -579,6 +580,108 @@ export function normalizeGrokAccountUsage(
   return snapshot
 }
 
+export interface CursorUsageRaw {
+  membershipType?: string | null
+  billingCycleEnd?: string | null
+  individualUsage?: {
+    plan?: {
+      /** Cents. */
+      used?: number | null
+      /** Cents. */
+      limit?: number | null
+      /** Cents. */
+      remaining?: number | null
+      totalPercentUsed?: number | null
+    } | null
+  } | null
+}
+
+/** Cursor's dashboard reports plan spend in cents; surface it as a credits row. */
+export function normalizeCursorUsage(
+  raw: CursorUsageRaw | null,
+  now: string,
+  source: UsageLimitSource = "on_demand",
+): ProviderUsageSnapshot {
+  const base: ProviderUsageSnapshot = {
+    provider: "cursor", status: "unknown", plan: null, windows: [], credits: null, detail: null, updatedAt: null,
+  }
+  const plan = raw?.individualUsage?.plan
+  if (!raw || !plan) {
+    return { ...base, status: "unavailable", detail: "Could not read Cursor usage. Sign in with cursor-agent login." }
+  }
+  const cents = (value: number | null | undefined) => (typeof value === "number" && Number.isFinite(value) ? value / 100 : null)
+  const limitAmount = cents(plan.limit)
+  const usedAmount = cents(plan.used) ?? (limitAmount !== null && cents(plan.remaining) !== null ? limitAmount - cents(plan.remaining)! : null)
+  const usedPercent = clampPercent(
+    typeof plan.totalPercentUsed === "number" && Number.isFinite(plan.totalPercentUsed)
+      ? plan.totalPercentUsed
+      : usedAmount !== null && limitAmount !== null && limitAmount > 0 ? (usedAmount / limitAmount) * 100 : null,
+  )
+  if (usedPercent === null && usedAmount === null) {
+    return { ...base, status: "unavailable", detail: "Cursor usage response had no plan usage." }
+  }
+  const resetsAt = raw.billingCycleEnd && !Number.isNaN(Date.parse(raw.billingCycleEnd))
+    ? new Date(raw.billingCycleEnd).toISOString()
+    : null
+  const snapshot: ProviderUsageSnapshot = {
+    ...base,
+    status: "ok",
+    plan: raw.membershipType ?? null,
+    credits: {
+      label: "Monthly spend limit",
+      usedPercent,
+      usedAmount,
+      limitAmount,
+      currency: "USD",
+      detail: null,
+      resetsAt,
+      recordedAt: now,
+      source,
+    },
+  }
+  snapshot.updatedAt = latestRecordedAt(snapshot)
+  return snapshot
+}
+
+function readCursorAccessToken(): Promise<string | null> {
+  if (process.platform !== "darwin") return Promise.resolve(null)
+  return new Promise((resolve) => {
+    execFile("security", ["find-generic-password", "-s", "cursor-access-token", "-a", "cursor-user", "-w"], { timeout: 5000 }, (error, stdout) => {
+      const token = error ? "" : stdout.trim()
+      resolve(token || null)
+    })
+  })
+}
+
+/**
+ * Cursor plan usage from the dashboard API, authed with a session cookie built
+ * from the CLI's keychain token (macOS only). Re-read each poll; the token and
+ * cookie are never logged or persisted. Null when signed out or rejected.
+ */
+export async function fetchCursorUsage(): Promise<CursorUsageRaw | null> {
+  const token = await readCursorAccessToken()
+  if (!token) return null
+  let sub: string | undefined
+  try {
+    const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as { sub?: string }
+    sub = payload.sub
+  } catch {
+    return null
+  }
+  const userId = sub?.split("|")[1]
+  if (!userId) return null
+  const response = await fetch("https://cursor.com/api/usage-summary", {
+    headers: {
+      Cookie: `WorkosCursorSessionToken=${userId}%3A%3A${token}`,
+      Origin: "https://cursor.com",
+    },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (response.status === 401 || response.status === 403) return null
+  if (!response.ok) throw new Error(`Cursor usage request failed (${response.status})`)
+  return await response.json() as CursorUsageRaw
+}
+
 function staticProviderSnapshot(provider: AgentProvider): ProviderUsageSnapshot {
   if (provider === "pi") {
     return {
@@ -602,14 +705,13 @@ function staticProviderSnapshot(provider: AgentProvider): ProviderUsageSnapshot 
       updatedAt: null,
     }
   }
-  // cursor (this phase): not wired up.
   return {
     provider,
-    status: "unavailable",
+    status: "unknown",
     plan: null,
     windows: [],
     credits: null,
-    detail: "Usage limits for Cursor are not available yet.",
+    detail: null,
     updatedAt: null,
   }
 }
@@ -635,6 +737,8 @@ export interface UsageLimitsManagerDeps {
   fetchCodexRateLimits?: () => Promise<CodexRateLimitsRaw | null>
   /** Fetch Grok Build billing + subscription from cli-chat-proxy. */
   fetchGrokUsage?: () => Promise<GrokUsageRaw | null>
+  /** Fetch Cursor plan usage from the dashboard API. */
+  fetchCursorUsage?: () => Promise<CursorUsageRaw | null>
   now?: () => Date
 }
 
@@ -673,7 +777,7 @@ export class UsageLimitsManager {
       const text = await readFile(this.filePath, "utf8")
       if (text.trim()) {
         const parsed = JSON.parse(text) as UsageLimitsFile
-        for (const provider of ["claude", "codex", "grok"] as const) {
+        for (const provider of ["claude", "codex", "grok", "cursor"] as const) {
           const persisted = parsed.providers?.[provider]
           if (persisted && typeof persisted === "object") {
             // Mark persisted windows as cache-sourced so the UI can show staleness.
@@ -751,7 +855,7 @@ export class UsageLimitsManager {
   }
 
   private async doRefresh() {
-    await Promise.all([this.refreshClaude(), this.refreshCodex(), this.refreshGrok()])
+    await Promise.all([this.refreshClaude(), this.refreshCodex(), this.refreshGrok(), this.refreshCursor()])
     this.lastRefreshAt = (this.deps.now?.() ?? new Date()).getTime()
     // Make refresh() a durable point: the persisted cache reflects this read.
     await this.persistChain
@@ -830,6 +934,20 @@ export class UsageLimitsManager {
     }
   }
 
+  private async refreshCursor() {
+    if (!this.deps.fetchCursorUsage) return
+    try {
+      const raw = await this.deps.fetchCursorUsage()
+      this.applyRefreshed("cursor", normalizeCursorUsage(raw, this.nowIso()))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.applyRefreshed("cursor", {
+        provider: "cursor", status: "unavailable", plan: null, windows: [], credits: null,
+        detail: `Failed to read Cursor usage: ${message}`, updatedAt: null,
+      })
+    }
+  }
+
   private async persist() {
     const file: UsageLimitsFile = {
       version: 1,
@@ -837,6 +955,7 @@ export class UsageLimitsManager {
         claude: this.snapshots.get("claude"),
         codex: this.snapshots.get("codex"),
         grok: this.snapshots.get("grok"),
+        cursor: this.snapshots.get("cursor"),
       },
     }
     try {

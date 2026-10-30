@@ -58,11 +58,26 @@ function formatCompact(value: number): string {
 }
 
 /** Whole-dollar money, abbreviated above a thousand: "$130", "$1.3k", "$2k", "$1.2m". */
-function formatMoney(amount: number, currency: string | null): string {
+export function formatMoney(amount: number, currency: string | null): string {
   const compact = formatCompact(amount)
   const symbol = currencySymbol(currency)
   // Keep the symbol ahead of the sign: -$5, not $-5.
   return compact.startsWith("-") ? `-${symbol}${compact.slice(1)}` : `${symbol}${compact}`
+}
+
+/** Money to the cent, cents dropped when whole: "$43.56", "$1,000". */
+export function formatMoneyExact(amount: number, currency: string | null): string {
+  const digits = Number.isInteger(amount) ? 0 : 2
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency ?? "USD",
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(amount)
+  } catch {
+    return amount.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })
+  }
 }
 
 function creditsSummary(credits: NonNullable<ProviderUsageSnapshot["credits"]>): string | null {

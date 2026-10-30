@@ -1,10 +1,29 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react"
-import { formatPercent, formatUntil } from "../../app/settings/UsageSection"
+import type { UsageLimitCredits } from "../../../shared/types"
+import { formatMoney, formatMoneyExact, formatPercent, formatUntil } from "../../app/settings/UsageSection"
 import { openCommandPalette } from "../command-palette/CommandPalette"
 import { formatResetCountdown, pickUsageLayout, windowAsOf, type ComposerUsageRow } from "../../lib/composerUsage"
 import { formatRelativeTime } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
+
+/** What's left under a spend cap, abbreviated: "$956 left", "$1.2k left". */
+function creditsLeft(credits: UsageLimitCredits): string | null {
+  if (credits.usedAmount === null || credits.limitAmount === null) return null
+  return `${formatMoney(Math.max(0, credits.limitAmount - credits.usedAmount), credits.currency)} left`
+}
+
+/** The spend to the cent: "$43.56 of $1,000 used". */
+function creditsSpent(credits: UsageLimitCredits): string | null {
+  if (credits.usedAmount === null) return null
+  const used = formatMoneyExact(credits.usedAmount, credits.currency)
+  return credits.limitAmount !== null ? `${used} of ${formatMoneyExact(credits.limitAmount, credits.currency)} used` : `${used} used`
+}
+
+/** The fourth column: the reset countdown, or for a spend cap what's left. */
+function rowTail({ window, credits }: ComposerUsageRow): string | null {
+  return credits ? creditsLeft(credits) : formatResetCountdown(window.resetsAt)
+}
 
 function fillColorClass(usedPercent: number): string {
   if (usedPercent >= 90) return "bg-red-500"
@@ -26,7 +45,8 @@ const FULL_COLUMNS = "grid-cols-[auto_40px_auto_auto]"
 const COMPACT_COLUMNS = "grid-cols-[auto_40px_auto]"
 
 function UsageRows({ rows, showCountdown }: { rows: ComposerUsageRow[]; showCountdown: boolean }) {
-  return rows.map(({ window, shortLabel }) => {
+  return rows.map((row) => {
+    const { window, shortLabel } = row
     const usedPercent = Math.max(0, Math.min(100, window.usedPercent ?? 0))
     return (
       <Fragment key={window.id}>
@@ -39,7 +59,7 @@ function UsageRows({ rows, showCountdown }: { rows: ComposerUsageRow[]; showCoun
         </span>
         <span className="whitespace-nowrap text-right tabular-nums">{formatPercent(window.usedPercent)}</span>
         {showCountdown ? (
-          <span className="whitespace-nowrap tabular-nums">{formatResetCountdown(window.resetsAt) ?? ""}</span>
+          <span className="whitespace-nowrap tabular-nums">{rowTail(row) ?? ""}</span>
         ) : null}
       </Fragment>
     )
@@ -72,9 +92,10 @@ export function ComposerUsageBar({
   useMinuteTick()
   // Re-read each minute, so a window that resets mid-session drops to 0%.
   const rows = rawRows.map((row) => ({ ...row, window: windowAsOf(row.window) }))
-  const summary = rows.map(({ window }) => {
-    const countdown = formatResetCountdown(window.resetsAt)
-    return `${window.label} ${formatPercent(window.usedPercent)} used${countdown ? `, resets in ${countdown}` : ""}`
+  const summary = rows.map((row) => {
+    const tail = rowTail(row)
+    const suffix = tail ? (row.credits ? `, ${tail}` : `, resets in ${tail}`) : ""
+    return `${row.window.label} ${formatPercent(row.window.usedPercent)} used${suffix}`
   }).join("; ")
 
   // Both widths come from invisible copies, so the choice never depends on
@@ -122,8 +143,9 @@ export function ComposerUsageBar({
       </TooltipTrigger>
       <TooltipContent side="top" align="start" className="w-max max-w-none px-3 py-2">
         <div className="space-y-1.5 leading-tight">
-          {rows.map(({ window }) => {
+          {rows.map(({ window, credits }) => {
             const resets = window.resetsAt ? formatUntil(window.resetsAt) : null
+            const spent = credits ? creditsSpent(credits) : null
             // Pushed and refreshed reads are current; a cached one is from an
             // earlier session, so say how old it is.
             const stale = window.source === "cache" ? `Updated ${formatRelativeTime(window.recordedAt)}` : null
@@ -132,9 +154,9 @@ export function ComposerUsageBar({
                 <div className="whitespace-nowrap text-xs font-medium text-foreground">
                   {window.label} · {formatPercent(window.usedPercent)} used
                 </div>
-                {resets || stale ? (
+                {resets || spent || stale ? (
                   <div className="whitespace-nowrap text-xs text-muted-foreground">
-                    {[resets ? `Resets ${resets}` : null, stale].filter(Boolean).join(" · ")}
+                    {[resets ? `Resets ${resets}` : spent, stale].filter(Boolean).join(" · ")}
                   </div>
                 ) : null}
               </div>

@@ -1,10 +1,32 @@
 import { deriveModelLabel } from "../../shared/types"
-import type { AgentProvider, UsageLimitWindow, UsageLimitsSnapshot } from "../../shared/types"
+import type { AgentProvider, UsageLimitCredits, UsageLimitWindow, UsageLimitsSnapshot } from "../../shared/types"
 
 export interface ComposerUsageRow {
   window: UsageLimitWindow
   /** A row label just long enough to tell the stack apart: "5h", "Wk", "Opus". */
   shortLabel: string
+  /** Set on the spend-cap row: `window` is then the cap's percent, with no reset. */
+  credits?: UsageLimitCredits
+}
+
+/**
+ * A spend cap (Claude Enterprise extra usage) as a meter row, for plans that
+ * report no time windows. Null when the cap has no percent to draw.
+ */
+function creditsRow(credits: UsageLimitCredits | null): ComposerUsageRow | null {
+  if (!credits || credits.usedPercent === null) return null
+  return {
+    window: {
+      id: "credits",
+      label: credits.label,
+      usedPercent: credits.usedPercent,
+      resetsAt: null,
+      recordedAt: credits.recordedAt,
+      source: credits.source,
+    },
+    shortLabel: "Extra",
+    credits,
+  }
 }
 
 /** Model-specific Claude weekly windows and the model family each one limits. */
@@ -99,7 +121,8 @@ export function shortUsageLabel(window: UsageLimitWindow): string {
 /**
  * Every limit on the composer's provider and model, shortest window first,
  * or null when that provider reports none. The server keeps every window it
- * has seen (`mergeUsageWindows`), so the rows stay put between reads.
+ * has seen (`mergeUsageWindows`), so the rows stay put between reads. With no
+ * windows, a spend cap stands in as the one row.
  */
 export function selectComposerUsage(
   snapshot: UsageLimitsSnapshot | null,
@@ -115,7 +138,9 @@ export function selectComposerUsage(
     .map((window, index) => ({ window, index, minutes: windowMinutes(window) }))
     .sort((a, b) => a.minutes - b.minutes || a.index - b.index)
     .map(({ window }) => ({ window, shortLabel: shortUsageLabel(window) }))
-  return rows.length > 0 ? rows : null
+  if (rows.length > 0) return rows
+  const spendCap = creditsRow(providerSnapshot.credits)
+  return spendCap ? [spendCap] : null
 }
 
 export type ComposerUsageLayout = "full" | "compact" | "none"

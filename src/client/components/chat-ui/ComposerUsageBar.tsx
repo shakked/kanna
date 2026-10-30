@@ -43,14 +43,23 @@ function useMinuteTick() {
 const GRID_CLASS = "grid shrink-0 items-center gap-x-1.5 px-1 text-left text-[9px] font-medium leading-[9px]"
 const FULL_COLUMNS = "grid-cols-[auto_40px_auto_auto]"
 const COMPACT_COLUMNS = "grid-cols-[auto_40px_auto]"
+// A lone spend-cap row has no label, so no label column either.
+const UNLABELED_FULL_COLUMNS = "grid-cols-[40px_auto_auto]"
+const UNLABELED_COMPACT_COLUMNS = "grid-cols-[40px_auto]"
 
-function UsageRows({ rows, showCountdown }: { rows: ComposerUsageRow[]; showCountdown: boolean }) {
+function gridColumns(labeled: boolean, full: boolean): string {
+  if (labeled) return full ? FULL_COLUMNS : COMPACT_COLUMNS
+  return full ? UNLABELED_FULL_COLUMNS : UNLABELED_COMPACT_COLUMNS
+}
+
+function UsageRows({ rows, showCountdown, labeled }: { rows: ComposerUsageRow[]; showCountdown: boolean; labeled: boolean }) {
   return rows.map((row) => {
     const { window, shortLabel } = row
     const usedPercent = Math.max(0, Math.min(100, window.usedPercent ?? 0))
     return (
       <Fragment key={window.id}>
-        <span className="whitespace-nowrap">{shortLabel}</span>
+        {/* Kept (empty) beside labelled rows, so the columns line up. */}
+        {labeled ? <span className="whitespace-nowrap">{shortLabel}</span> : null}
         <span className="h-[3px] overflow-hidden rounded-full bg-muted-foreground/20" aria-hidden="true">
           <span
             className={cn("block h-full rounded-full transition-[width] duration-500 ease-out", fillColorClass(usedPercent))}
@@ -92,6 +101,7 @@ export function ComposerUsageBar({
   useMinuteTick()
   // Re-read each minute, so a window that resets mid-session drops to 0%.
   const rows = rawRows.map((row) => ({ ...row, window: windowAsOf(row.window) }))
+  const labeled = rows.some((row) => row.shortLabel !== "")
   const summary = rows.map((row) => {
     const tail = rowTail(row)
     const suffix = tail ? (row.credits ? `, ${tail}` : `, resets in ${tail}`) : ""
@@ -124,7 +134,7 @@ export function ComposerUsageBar({
           aria-label={`Plan usage: ${summary}. Open usage`}
           className={cn(
             GRID_CLASS,
-            layout === "full" ? FULL_COLUMNS : COMPACT_COLUMNS,
+            gridColumns(labeled, layout === "full"),
             "relative min-h-6 cursor-pointer rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             // As tall as the context ring (24px): rows spread over it, a lone
             // row centred in it; three or more fill it on their own.
@@ -132,12 +142,16 @@ export function ComposerUsageBar({
             className,
           )}
         >
-          <UsageRows rows={rows} showCountdown={layout === "full"} />
+          <UsageRows rows={rows} showCountdown={layout === "full"} labeled={labeled} />
           {/* Measuring copies: zero-size and clipped, so they never add to
               the row's scroll width. */}
           <span aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 h-0 w-0 overflow-hidden">
-            <span ref={fullRef} className={cn(GRID_CLASS, FULL_COLUMNS, "w-max")}><UsageRows rows={rows} showCountdown /></span>
-            <span ref={compactRef} className={cn(GRID_CLASS, COMPACT_COLUMNS, "w-max")}><UsageRows rows={rows} showCountdown={false} /></span>
+            <span ref={fullRef} className={cn(GRID_CLASS, gridColumns(labeled, true), "w-max")}>
+              <UsageRows rows={rows} showCountdown labeled={labeled} />
+            </span>
+            <span ref={compactRef} className={cn(GRID_CLASS, gridColumns(labeled, false), "w-max")}>
+              <UsageRows rows={rows} showCountdown={false} labeled={labeled} />
+            </span>
           </span>
         </button>
       </TooltipTrigger>

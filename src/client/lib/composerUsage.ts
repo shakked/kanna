@@ -3,7 +3,10 @@ import type { AgentProvider, UsageLimitCredits, UsageLimitWindow, UsageLimitsSna
 
 export interface ComposerUsageRow {
   window: UsageLimitWindow
-  /** A row label just long enough to tell the stack apart: "5h", "Wk", "Opus". */
+  /**
+   * A row label just long enough to tell the stack apart: "5h", "Wk", "Opus".
+   * Empty on the spend-cap row, which needs none.
+   */
   shortLabel: string
   /** Set on the spend-cap row: `window` is then the cap's percent, with no reset. */
   credits?: UsageLimitCredits
@@ -13,18 +16,19 @@ export interface ComposerUsageRow {
  * A spend cap (Claude Enterprise extra usage) as a meter row, for plans that
  * report no time windows. Null when the cap has no percent to draw.
  */
-function creditsRow(credits: UsageLimitCredits | null): ComposerUsageRow | null {
+function creditsRow(provider: AgentProvider, credits: UsageLimitCredits | null): ComposerUsageRow | null {
   if (!credits || credits.usedPercent === null) return null
   return {
     window: {
       id: "credits",
-      label: credits.label,
+      // Claude's cap is `extra_usage.monthly_limit`.
+      label: provider === "claude" ? "Monthly spend limit" : credits.label,
       usedPercent: credits.usedPercent,
       resetsAt: null,
       recordedAt: credits.recordedAt,
       source: credits.source,
     },
-    shortLabel: "Extra",
+    shortLabel: "",
     credits,
   }
 }
@@ -139,7 +143,7 @@ export function selectComposerUsage(
     .sort((a, b) => a.minutes - b.minutes || a.index - b.index)
     .map(({ window }) => ({ window, shortLabel: shortUsageLabel(window) }))
   if (rows.length > 0) return rows
-  const spendCap = creditsRow(providerSnapshot.credits)
+  const spendCap = creditsRow(provider, providerSnapshot.credits)
   return spendCap ? [spendCap] : null
 }
 

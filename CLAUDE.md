@@ -6,7 +6,8 @@ Bun server + React 19 client, talking over one WebSocket.
 ## Commands
 
 - `bun run dev` — client (Vite) + server together
-- `bun test` — unit/integration suite (Bun test)
+- `bun test` — unit/integration suite (Bun test). Agents: never write or run
+  unit tests; see `AGENTS.md`.
 - `bun run check` — typecheck + both production builds
 - `bun run build` — client + export-viewer bundles
 

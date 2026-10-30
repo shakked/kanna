@@ -912,13 +912,15 @@ describe("read models", () => {
 
     /** Dirty paths whose `HEAD` blobs the probe couldn't read — everything unknown. */
     function tree(dirty: boolean, ...paths: string[]) {
-      return new Map([["project-1", { dirty, paths: new Set(paths), headBlobs: new Map() }]])
+      return new Map([["project-1", { dirty, trackedDirty: dirty, ahead: 0, paths: new Set(paths), headBlobs: new Map() }]])
     }
 
     /** Dirty paths with what `HEAD` currently holds for each. */
     function treeAt(...entries: Array<[string, string | null]>) {
       return new Map([["project-1", {
         dirty: true,
+        trackedDirty: true,
+        ahead: 0,
         paths: new Set(entries.map(([dirtyPath]) => dirtyPath)),
         headBlobs: new Map(entries),
       }]])
@@ -1076,6 +1078,8 @@ describe("read models", () => {
           ]),
           {
             dirty: true,
+            trackedDirty: true,
+            ahead: 0,
             paths: new Set(["tiny.ts", "big.ts"]),
             headBlobs: new Map([["tiny.ts", "head-tiny"], ["big.ts", "someone-elses-commit"]]),
           },
@@ -1091,7 +1095,7 @@ describe("read models", () => {
             { path: "big.ts", additions: 200, deletions: 10 },
             { path: "middling.ts", additions: 30 },
           ]),
-          { dirty: true, paths: new Set(["small.ts", "big.ts", "middling.ts"]), headBlobs: new Map() },
+          { dirty: true, trackedDirty: true, ahead: 0, paths: new Set(["small.ts", "big.ts", "middling.ts"]), headBlobs: new Map() },
         )
 
         expect(result.files.map((file) => file.path)).toEqual(["big.ts", "middling.ts", "small.ts"])
@@ -1103,7 +1107,7 @@ describe("read models", () => {
         // a stale cache.
         const result = deriveChatTouchedFiles(
           chatWith([{ path: "app.ts", baseBlob: "what-the-chat-edited-from", additions: 9, deletions: 2 }]),
-          { dirty: true, paths: new Set(["app.ts"]), headBlobs: new Map([["app.ts", "the-commit-that-landed-it"]]) },
+          { dirty: true, trackedDirty: true, ahead: 0, paths: new Set(["app.ts"]), headBlobs: new Map([["app.ts", "the-commit-that-landed-it"]]) },
         )
 
         expect(result).toEqual({ files: [], totalCount: 0 })
@@ -1116,7 +1120,7 @@ describe("read models", () => {
             { path: "a.ts", additions: 4 },
             { path: "c.ts", additions: 4 },
           ]),
-          { dirty: true, paths: new Set(["a.ts", "b.ts", "c.ts"]), headBlobs: new Map() },
+          { dirty: true, trackedDirty: true, ahead: 0, paths: new Set(["a.ts", "b.ts", "c.ts"]), headBlobs: new Map() },
         )
 
         expect(result.files.map((file) => file.path)).toEqual(["a.ts", "b.ts", "c.ts"])
@@ -1130,7 +1134,7 @@ describe("read models", () => {
 
         const result = deriveChatTouchedFiles(
           chatWith(files),
-          { dirty: true, paths: new Set(files.map((file) => file.path)), headBlobs: new Map() },
+          { dirty: true, trackedDirty: true, ahead: 0, paths: new Set(files.map((file) => file.path)), headBlobs: new Map() },
           8,
         )
 
@@ -1153,6 +1157,8 @@ describe("read models", () => {
           ]),
           {
             dirty: true,
+            trackedDirty: true,
+            ahead: 0,
             paths: new Set(["app.ts", "legacy.ts", "logo.png", "script.sh"]),
             headBlobs: new Map(),
           },
@@ -1169,7 +1175,7 @@ describe("read models", () => {
         // later turns touch them.
         const result = deriveChatTouchedFiles(
           chatWith([{ path: "a.ts", baseBlob: "x" }, { path: "b.ts", baseBlob: "y" }]),
-          { dirty: true, paths: new Set(["a.ts"]), headBlobs: new Map([["a.ts", "x"]]) },
+          { dirty: true, trackedDirty: true, ahead: 0, paths: new Set(["a.ts"]), headBlobs: new Map([["a.ts", "x"]]) },
         )
 
         expect(result).toEqual({ files: [], totalCount: 0 })
@@ -1178,7 +1184,7 @@ describe("read models", () => {
       test("says nothing when the tree is clean", () => {
         const result = deriveChatTouchedFiles(
           chatWith([{ path: "app.ts", baseBlob: "b", additions: 3 }]),
-          { dirty: false, paths: new Set(), headBlobs: new Map() },
+          { dirty: false, trackedDirty: false, ahead: 0, paths: new Set(), headBlobs: new Map() },
         )
 
         expect(result).toEqual({ files: [], totalCount: 0 })
@@ -1210,5 +1216,45 @@ describe("read models", () => {
       const flagged = rows.filter((row) => row.uncommittedWork).map((row) => row.chatId).sort()
       expect(flagged).toEqual(["chat-a", "chat-c"])
     })
+  })
+})
+
+describe("deriveSidebarData gitState", () => {
+  function state() {
+    const next = createEmptyState()
+    next.projectsById.set("project-1", { id: "project-1", localPath: "/tmp/project", title: "Project", createdAt: 1, updatedAt: 1 })
+    next.projectIdsByPath.set("/tmp/project", "project-1")
+    return next
+  }
+  const label = new Map([["project-1", { repoName: "project", branchName: "main" }]])
+  function probe(fields: Partial<WorkingTreeProbe>): ReadonlyMap<string, WorkingTreeProbe> {
+    return new Map([["project-1", { dirty: false, trackedDirty: false, ahead: 0, paths: new Set<string>(), headBlobs: new Map(), ...fields }]])
+  }
+  function groupFor(workingTrees?: ReadonlyMap<string, WorkingTreeProbe>, repoLabels: ReadonlyMap<string, { repoName: string }> = label) {
+    return deriveSidebarData(state(), new Map(), { nowMs: 1_000_000, repoLabels, ...(workingTrees ? { workingTrees } : {}) }).projectGroups[0]
+  }
+
+  test("states tracked changes, unpushed commits and untracked-only work", () => {
+    expect(groupFor(probe({ dirty: true, trackedDirty: true, paths: new Set(["a.ts"]) }))?.gitState)
+      .toEqual({ dirty: true, ahead: 0, untrackedOnly: false })
+    expect(groupFor(probe({ ahead: 3 }))?.gitState).toEqual({ dirty: false, ahead: 3, untrackedOnly: false })
+    expect(groupFor(probe({ dirty: true, paths: new Set(["scratch.txt"]) }))?.gitState)
+      .toEqual({ dirty: false, ahead: 0, untrackedOnly: true })
+    expect(groupFor(probe({}))?.gitState).toEqual({ dirty: false, ahead: 0, untrackedOnly: false })
+  })
+
+  test("says nothing before a probe, or for a folder that isn't a repo", () => {
+    expect(groupFor()).not.toHaveProperty("gitState")
+    // A non-repo's probe reads as clean; that must not be passed off as a clean repo.
+    expect(groupFor(probe({}), new Map())).not.toHaveProperty("gitState")
+  })
+
+  test("serializes the same while the git state holds, so the push dedupe doesn't churn", () => {
+    const snapshot = () => JSON.stringify(deriveSidebarData(state(), new Map(), {
+      nowMs: 1_000_000,
+      repoLabels: label,
+      workingTrees: probe({ ahead: 1 }),
+    }))
+    expect(snapshot()).toBe(snapshot())
   })
 })

@@ -1343,7 +1343,7 @@ export interface FsListResult {
 export const DEFAULT_NEW_PROJECTS_DIRECTORY = "~/Kanna"
 
 /** Bounds of `idleSessionTimeoutMinutes`. 0 closes an idle session as soon as its turn ends. */
-export const DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES = 30
+export const DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES = 5
 export const MIN_IDLE_SESSION_TIMEOUT_MINUTES = 0
 export const MAX_IDLE_SESSION_TIMEOUT_MINUTES = 1440
 

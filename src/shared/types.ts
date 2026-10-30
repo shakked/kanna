@@ -1442,6 +1442,13 @@ export interface AppSettingsSnapshot {
    * Off unless true, and absent when off.
    */
   widgetsPeekEnabled?: boolean
+  /** Show the plan-usage block in the sidebar. Off unless true, and absent when off. */
+  sidebarUsageEnabled?: boolean
+  /**
+   * Show each chat's CPU on its sidebar row, and sample it. Off unless true,
+   * and absent when off.
+   */
+  chatCpuEnabled?: boolean
   /** Assumed monthly reset day of the spend cap, 1–28. Absent when it is the default. */
   usageResetDay?: number
   /** Base directory where cloned and newly created projects are placed. */
@@ -1500,6 +1507,8 @@ export interface AppSettingsPatch {
   delegatorMode?: boolean
   chatTabsEnabled?: boolean
   widgetsPeekEnabled?: boolean
+  sidebarUsageEnabled?: boolean
+  chatCpuEnabled?: boolean
   usageResetDay?: number
   newProjectsDirectory?: string
   setupShown?: boolean

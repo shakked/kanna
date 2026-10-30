@@ -235,8 +235,11 @@ function KannaLayout() {
 
   // Per-chat CPU for the chat rows. The server runs `ps` only while someone
   // holds this subscription, so it is held only while the page is visible: a
-  // window in the background costs the machine nothing.
+  // window in the background costs the machine nothing. Off by default: with
+  // the setting off nothing subscribes, so the server never samples.
+  const chatCpuEnabled = state.appSettings?.chatCpuEnabled === true
   useEffect(() => {
+    if (!chatCpuEnabled) return
     let unsubscribe: (() => void) | null = null
     const sync = () => {
       const visible = document.visibilityState === "visible"
@@ -259,7 +262,7 @@ function KannaLayout() {
       unsubscribe?.()
       useChatCpuStore.getState().clear()
     }
-  }, [state.socket])
+  }, [state.socket, chatCpuEnabled])
 
   // Onboarding auto-launch (see getSetupLaunchAction): a first-ever launch
   // opens the wizard instantly — cards show live probe status inside — while

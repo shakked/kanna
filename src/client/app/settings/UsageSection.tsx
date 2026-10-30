@@ -4,6 +4,7 @@ import type { ProviderUsageSnapshot, UsageLimitWindow, UsageLimitsSnapshot } fro
 import { DEFAULT_USAGE_RESET_DAY, MAX_USAGE_RESET_DAY, MIN_USAGE_RESET_DAY, PROVIDERS } from "../../../shared/types"
 import { PROVIDER_ICONS } from "../../components/chat-ui/ChatPreferenceControls"
 import { Input } from "../../components/ui/input"
+import { Switch } from "../../components/ui/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip"
 import { formatRelativeTime } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
@@ -442,6 +443,23 @@ export function useUsageLimits(socket: KannaState["socket"], active = true) {
 }
 
 /** The assumed monthly reset day of the spend cap (the API reports none). */
+function SidebarUsageRow({ onWrite }: { onWrite: KannaState["handleWriteAppSettings"] }) {
+  const enabled = useAppSettingsStore((store) => store.settings?.sidebarUsageEnabled === true)
+  return (
+    <SettingsGroup title="Sidebar">
+      <SettingsRow def={SETTINGS_ROWS.sidebarUsage}>
+        <Switch
+          checked={enabled}
+          onCheckedChange={(checked) => {
+            void onWrite({ sidebarUsageEnabled: checked })
+          }}
+          aria-label={SETTINGS_ROWS.sidebarUsage.title}
+        />
+      </SettingsRow>
+    </SettingsGroup>
+  )
+}
+
 function UsageResetDayRow({ onWrite }: { onWrite: KannaState["handleWriteAppSettings"] }) {
   const resetDay = useAppSettingsStore((store) => store.settings?.usageResetDay) ?? DEFAULT_USAGE_RESET_DAY
   const [draft, setDraft] = useState(String(resetDay))
@@ -485,6 +503,7 @@ export function UsageSection({ state }: { state: Pick<KannaState, "socket" | "ha
 
   return (
     <div className="space-y-4">
+      <SidebarUsageRow onWrite={state.handleWriteAppSettings} />
       {snapshot ? (
         // Always render whatever we have (cached/stale) — the poll swaps in
         // fresh numbers when they land; the header "Updated …" is the control.

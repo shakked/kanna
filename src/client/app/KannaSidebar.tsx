@@ -858,6 +858,7 @@ function KannaSidebarImpl({
   const isLocalProjectsActive = isRootActive || location.pathname === "/home"
   const newSidebarEnabled = useAppSettingsStore((s) => s.settings?.newSidebarEnabled !== false)
   const devbox = useAppSettingsStore((s) => s.settings?.devbox === true)
+  const sidebarUsageEnabled = useAppSettingsStore((s) => s.settings?.sidebarUsageEnabled === true)
   const projectIconsInChats = useAppSettingsStore((s) => s.settings?.projectIconsInChats !== false)
   const newSidebarProjectsView = newSidebarEnabled && sidebarView === "projects"
 
@@ -1374,7 +1375,7 @@ function KannaSidebarImpl({
           onOpenExternalPath={onOpenExternalPath}
         />
 
-          <SidebarUsage socket={socket} />
+          {sidebarUsageEnabled ? <SidebarUsage socket={socket} /> : null}
           <MachineSwitcher />
         <div className={cn("hidden md:block border-t border-border p-2", isStandalone && "pb-[55px]")}>
           <button

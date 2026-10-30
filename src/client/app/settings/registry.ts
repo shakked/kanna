@@ -136,6 +136,12 @@ export const SETTINGS_ROWS = defineRows({
     description: "Show the closed widget column over the chat while the mouse is at the window's right edge.",
     keywords: ["widgets", "right sidebar", "hover", "edge", "popout", "overlay", "slideover", "peek"],
   },
+  chatCpu: {
+    sectionId: "general",
+    title: "Show CPU Usage on Chats",
+    description: "Show how much CPU each chat is using on its sidebar row. Off, it isn't measured.",
+    keywords: ["cpu", "performance", "load", "processor", "meter", "sidebar"],
+  },
   chatSounds: {
     sectionId: "general",
     title: "Chat Sounds",
@@ -255,6 +261,12 @@ export const SETTINGS_ROWS = defineRows({
     title: "Close Idle Sessions After",
     description: "Close a chat's Claude Code or Codex process once it has sat idle this long, to free its memory. The next message resumes the session. Chats with work still running in them stay open.",
     keywords: ["memory", "idle", "timeout", "process", "session", "ram", "resume", "close"],
+  },
+  sidebarUsage: {
+    sectionId: "usage",
+    title: "Show Plan Usage in the Sidebar",
+    description: "Show your Claude and Codex plan usage at the bottom of the sidebar.",
+    keywords: ["usage", "limits", "plan", "sidebar", "claude", "codex", "quota"],
   },
   usageResetDay: {
     sectionId: "usage",

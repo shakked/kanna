@@ -77,6 +77,8 @@ interface AppSettingsFile {
   delegatorMode?: unknown
   chatTabsEnabled?: unknown
   widgetsPeekEnabled?: unknown
+  sidebarUsageEnabled?: unknown
+  chatCpuEnabled?: unknown
   usageResetDay?: unknown
   newProjectsDirectory?: unknown
   setupShown?: unknown
@@ -212,6 +214,8 @@ function toFilePayload(state: AppSettingsState) {
     ...(state.delegatorMode === false ? { delegatorMode: false } : {}),
     ...(state.chatTabsEnabled === true ? { chatTabsEnabled: true } : {}),
     ...(state.widgetsPeekEnabled === true ? { widgetsPeekEnabled: true } : {}),
+    ...(state.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
+    ...(state.chatCpuEnabled === true ? { chatCpuEnabled: true } : {}),
     ...(state.usageResetDay !== undefined ? { usageResetDay: state.usageResetDay } : {}),
     newProjectsDirectory: state.newProjectsDirectory,
     setupShown: state.setupShown,
@@ -247,6 +251,8 @@ function toSnapshot(
     ...(state.delegatorMode === false ? { delegatorMode: false } : {}),
     ...(state.chatTabsEnabled === true ? { chatTabsEnabled: true } : {}),
     ...(state.widgetsPeekEnabled === true ? { widgetsPeekEnabled: true } : {}),
+    ...(state.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
+    ...(state.chatCpuEnabled === true ? { chatCpuEnabled: true } : {}),
     ...(state.usageResetDay !== undefined ? { usageResetDay: state.usageResetDay } : {}),
     newProjectsDirectory: state.newProjectsDirectory,
     setupShown: state.setupShown,
@@ -352,6 +358,8 @@ function normalizeAppSettings(
     ...(source?.delegatorMode === false ? { delegatorMode: false } : {}),
     ...(source?.chatTabsEnabled === true ? { chatTabsEnabled: true } : {}),
     ...(source?.widgetsPeekEnabled === true ? { widgetsPeekEnabled: true } : {}),
+    ...(source?.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
+    ...(source?.chatCpuEnabled === true ? { chatCpuEnabled: true } : {}),
     ...(usageResetDay !== DEFAULT_USAGE_RESET_DAY ? { usageResetDay } : {}),
     newProjectsDirectory,
     // Onboarding markers default to false so a machine that has never run the
@@ -398,6 +406,8 @@ function toComparablePayload(source: AppSettingsFile) {
     delegatorMode: source.delegatorMode,
     chatTabsEnabled: source.chatTabsEnabled,
     widgetsPeekEnabled: source.widgetsPeekEnabled,
+    sidebarUsageEnabled: source.sidebarUsageEnabled,
+    chatCpuEnabled: source.chatCpuEnabled,
     usageResetDay: source.usageResetDay,
     newProjectsDirectory: typeof source.newProjectsDirectory === "string"
       ? source.newProjectsDirectory.trim()

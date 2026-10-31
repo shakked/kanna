@@ -19,8 +19,11 @@ import {
 import {
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_NEW_PROJECTS_DIRECTORY,
+  DEFAULT_USAGE_RESET_DAY,
   MAX_IDLE_SESSION_TIMEOUT_MINUTES,
+  MAX_USAGE_RESET_DAY,
   MIN_IDLE_SESSION_TIMEOUT_MINUTES,
+  MIN_USAGE_RESET_DAY,
   type AppSettingsPatch,
   type AppSettingsSnapshot,
   type AppThemePreference,
@@ -72,8 +75,12 @@ interface AppSettingsFile {
   newSidebarEnabled?: unknown
   projectIconsInChats?: unknown
   delegatorMode?: unknown
+  tokenSaverEnabled?: unknown
   chatTabsEnabled?: unknown
   widgetsPeekEnabled?: unknown
+  sidebarUsageEnabled?: unknown
+  chatCpuEnabled?: unknown
+  usageResetDay?: unknown
   newProjectsDirectory?: unknown
   setupShown?: unknown
   setupCompleted?: unknown
@@ -206,8 +213,12 @@ function toFilePayload(state: AppSettingsState) {
     newSidebarEnabled: state.newSidebarEnabled,
     ...(state.projectIconsInChats === false ? { projectIconsInChats: false } : {}),
     ...(state.delegatorMode === false ? { delegatorMode: false } : {}),
+    ...(state.tokenSaverEnabled === true ? { tokenSaverEnabled: true } : {}),
     ...(state.chatTabsEnabled === true ? { chatTabsEnabled: true } : {}),
     ...(state.widgetsPeekEnabled === true ? { widgetsPeekEnabled: true } : {}),
+    ...(state.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
+    ...(state.chatCpuEnabled === true ? { chatCpuEnabled: true } : {}),
+    ...(state.usageResetDay !== undefined ? { usageResetDay: state.usageResetDay } : {}),
     newProjectsDirectory: state.newProjectsDirectory,
     setupShown: state.setupShown,
     setupCompleted: state.setupCompleted,
@@ -240,8 +251,12 @@ function toSnapshot(
     newSidebarEnabled: state.newSidebarEnabled,
     ...(state.projectIconsInChats === false ? { projectIconsInChats: false } : {}),
     ...(state.delegatorMode === false ? { delegatorMode: false } : {}),
+    ...(state.tokenSaverEnabled === true ? { tokenSaverEnabled: true } : {}),
     ...(state.chatTabsEnabled === true ? { chatTabsEnabled: true } : {}),
     ...(state.widgetsPeekEnabled === true ? { widgetsPeekEnabled: true } : {}),
+    ...(state.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
+    ...(state.chatCpuEnabled === true ? { chatCpuEnabled: true } : {}),
+    ...(state.usageResetDay !== undefined ? { usageResetDay: state.usageResetDay } : {}),
     newProjectsDirectory: state.newProjectsDirectory,
     setupShown: state.setupShown,
     setupCompleted: state.setupCompleted,
@@ -299,6 +314,7 @@ function normalizeAppSettings(
   // A 5 without the marker is that, not a choice, and follows the default now.
   const idleSessionTimeoutChosen = source?.idleSessionTimeoutChosen === true
     || (typeof source?.idleSessionTimeoutMinutes === "number" && source.idleSessionTimeoutMinutes !== 5)
+  const usageResetDay = clampNumber(source?.usageResetDay, DEFAULT_USAGE_RESET_DAY, MIN_USAGE_RESET_DAY, MAX_USAGE_RESET_DAY)
   const state: AppSettingsState = {
     analyticsEnabled,
     analyticsUserId,
@@ -343,8 +359,12 @@ function normalizeAppSettings(
     newSidebarEnabled,
     ...(source?.projectIconsInChats === false ? { projectIconsInChats: false } : {}),
     ...(source?.delegatorMode === false ? { delegatorMode: false } : {}),
+    ...(source?.tokenSaverEnabled === true ? { tokenSaverEnabled: true } : {}),
     ...(source?.chatTabsEnabled === true ? { chatTabsEnabled: true } : {}),
     ...(source?.widgetsPeekEnabled === true ? { widgetsPeekEnabled: true } : {}),
+    ...(source?.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
+    ...(source?.chatCpuEnabled === true ? { chatCpuEnabled: true } : {}),
+    ...(usageResetDay !== DEFAULT_USAGE_RESET_DAY ? { usageResetDay } : {}),
     newProjectsDirectory,
     // Onboarding markers default to false so a machine that has never run the
     // wizard still gets it; once set they stay set for every browser.
@@ -388,8 +408,12 @@ function toComparablePayload(source: AppSettingsFile) {
     newSidebarEnabled: source.newSidebarEnabled,
     projectIconsInChats: source.projectIconsInChats,
     delegatorMode: source.delegatorMode,
+    tokenSaverEnabled: source.tokenSaverEnabled,
     chatTabsEnabled: source.chatTabsEnabled,
     widgetsPeekEnabled: source.widgetsPeekEnabled,
+    sidebarUsageEnabled: source.sidebarUsageEnabled,
+    chatCpuEnabled: source.chatCpuEnabled,
+    usageResetDay: source.usageResetDay,
     newProjectsDirectory: typeof source.newProjectsDirectory === "string"
       ? source.newProjectsDirectory.trim()
       : source.newProjectsDirectory,

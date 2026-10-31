@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useState } from "react"
 import { ChevronRight } from "lucide-react"
 import type { ProviderUsageSnapshot, UsageLimitWindow, UsageLimitsSnapshot } from "../../../shared/types"
-import { PROVIDERS } from "../../../shared/types"
+import { DEFAULT_USAGE_RESET_DAY, MAX_USAGE_RESET_DAY, MIN_USAGE_RESET_DAY, PROVIDERS } from "../../../shared/types"
 import { PROVIDER_ICONS } from "../../components/chat-ui/ChatPreferenceControls"
+import { Input } from "../../components/ui/input"
+import { Switch } from "../../components/ui/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip"
 import { formatRelativeTime } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
+import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import type { KannaState } from "../useKannaState"
+import { handleSettingsInputKeyDown, SETTINGS_NUMBER_INPUT_CLASS, SettingsField, SettingsGroup, SettingsRow } from "./shared"
+import { SETTINGS_ROWS } from "./registry"
 
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
@@ -58,11 +63,26 @@ function formatCompact(value: number): string {
 }
 
 /** Whole-dollar money, abbreviated above a thousand: "$130", "$1.3k", "$2k", "$1.2m". */
-function formatMoney(amount: number, currency: string | null): string {
+export function formatMoney(amount: number, currency: string | null): string {
   const compact = formatCompact(amount)
   const symbol = currencySymbol(currency)
   // Keep the symbol ahead of the sign: -$5, not $-5.
   return compact.startsWith("-") ? `-${symbol}${compact.slice(1)}` : `${symbol}${compact}`
+}
+
+/** Money to the cent, cents dropped when whole: "$43.56", "$1,000". */
+export function formatMoneyExact(amount: number, currency: string | null): string {
+  const digits = Number.isInteger(amount) ? 0 : 2
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency ?? "USD",
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(amount)
+  } catch {
+    return amount.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })
+  }
 }
 
 function creditsSummary(credits: NonNullable<ProviderUsageSnapshot["credits"]>): string | null {
@@ -72,6 +92,11 @@ function creditsSummary(credits: NonNullable<ProviderUsageSnapshot["credits"]>):
     parts.push(credits.limitAmount != null ? `${used} of ${formatMoney(credits.limitAmount, credits.currency)} used` : `${used} used`)
   }
   if (credits.usedPercent != null) parts.push(`${formatPercent(credits.usedPercent)} used`)
+  if (credits.limitReached) parts.push("Limit reached")
+  if (credits.resetsAt) {
+    const until = formatUntil(credits.resetsAt)
+    if (until) parts.push(`Resets ${until}`)
+  }
   if (credits.detail) {
     // Codex reports its prepaid balance as a bare numeric string ("1000");
     // render it as a remaining count. Non-numeric details ("Unlimited") pass through.
@@ -417,11 +442,68 @@ export function useUsageLimits(socket: KannaState["socket"], active = true) {
   return { snapshot, refreshing, refresh }
 }
 
-export function UsageSection({ state }: { state: Pick<KannaState, "socket"> }) {
+/** The assumed monthly reset day of the spend cap (the API reports none). */
+function SidebarUsageRow({ onWrite }: { onWrite: KannaState["handleWriteAppSettings"] }) {
+  const enabled = useAppSettingsStore((store) => store.settings?.sidebarUsageEnabled === true)
+  return (
+    <SettingsGroup title="Sidebar">
+      <SettingsRow def={SETTINGS_ROWS.sidebarUsage}>
+        <Switch
+          checked={enabled}
+          onCheckedChange={(checked) => {
+            void onWrite({ sidebarUsageEnabled: checked })
+          }}
+          aria-label={SETTINGS_ROWS.sidebarUsage.title}
+        />
+      </SettingsRow>
+    </SettingsGroup>
+  )
+}
+
+function UsageResetDayRow({ onWrite }: { onWrite: KannaState["handleWriteAppSettings"] }) {
+  const resetDay = useAppSettingsStore((store) => store.settings?.usageResetDay) ?? DEFAULT_USAGE_RESET_DAY
+  const [draft, setDraft] = useState(String(resetDay))
+  useEffect(() => {
+    setDraft(String(resetDay))
+  }, [resetDay])
+
+  function commit() {
+    const next = Math.round(Number(draft))
+    if (draft.trim() === "" || !Number.isFinite(next)) {
+      setDraft(String(resetDay))
+      return
+    }
+    void onWrite({ usageResetDay: next }).catch(() => setDraft(String(resetDay)))
+  }
+
+  return (
+    <SettingsGroup title="Spend limit">
+      <SettingsRow def={SETTINGS_ROWS.usageResetDay} wideControl>
+        <SettingsField hint={`Day of the month, ${MIN_USAGE_RESET_DAY}–${MAX_USAGE_RESET_DAY}. An assumption, not read from Claude${resetDay === DEFAULT_USAGE_RESET_DAY ? ` (default ${DEFAULT_USAGE_RESET_DAY})` : ""}`}>
+          <Input
+            type="number"
+            min={MIN_USAGE_RESET_DAY}
+            max={MAX_USAGE_RESET_DAY}
+            step={1}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => handleSettingsInputKeyDown(event, commit)}
+            className={SETTINGS_NUMBER_INPUT_CLASS}
+          />
+        </SettingsField>
+      </SettingsRow>
+    </SettingsGroup>
+  )
+}
+
+export function UsageSection({ state }: { state: Pick<KannaState, "socket" | "handleWriteAppSettings"> }) {
   const { snapshot, refreshing, refresh: runRefresh } = useUsageLimits(state.socket)
+  const claudeHasSpendCap = snapshot?.providers.some((provider) => provider.provider === "claude" && provider.credits !== null) ?? false
 
   return (
     <div className="space-y-4">
+      <SidebarUsageRow onWrite={state.handleWriteAppSettings} />
       {snapshot ? (
         // Always render whatever we have (cached/stale) — the poll swaps in
         // fresh numbers when they land; the header "Updated …" is the control.
@@ -440,6 +522,7 @@ export function UsageSection({ state }: { state: Pick<KannaState, "socket"> }) {
           Loading usage…
         </div>
       )}
+      {claudeHasSpendCap ? <UsageResetDayRow onWrite={state.handleWriteAppSettings} /> : null}
     </div>
   )
 }

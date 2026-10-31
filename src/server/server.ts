@@ -25,7 +25,7 @@ import { isAnalyticsDisabledByEnv, KannaAnalyticsReporter, NoopAnalyticsReporter
 import { AppSettingsManager } from "./app-settings"
 import { refreshInstalledEditors } from "./editor-detection"
 import { refreshInstalledTerminals } from "./terminal-detection"
-import { UsageLimitsManager } from "./usage-limits"
+import { UsageLimitsManager, fetchCursorUsage } from "./usage-limits"
 import { ChatCpuMonitor } from "./chat-cpu"
 import { DiffStore } from "./diff-store"
 import { WorktreeProbe } from "./worktree-probe"
@@ -330,6 +330,16 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       void router.broadcastChatChange(change)
     },
     onError: (message) => console.warn(`${LOG_PREFIX} ${message}`),
+    tokenSaver: () => {
+      const settings = appSettings.getSnapshot()
+      return {
+        enabled: settings.tokenSaverEnabled === true,
+        delegatorMode: settings.delegatorMode !== false,
+        usageResetDay: settings.usageResetDay,
+        snapshot: usageLimits.getSnapshot(),
+        refreshUsage: () => void usageLimits.refresh().catch(() => undefined),
+      }
+    },
   })
   agent.orchestration = orchestrator
   agent.onChatSettled = (chatId) => orchestrator.handleChatSettled(chatId)
@@ -338,6 +348,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     fetchClaudeUsage: () => agent.fetchClaudeUsage(),
     fetchCodexRateLimits: () => agent.fetchCodexRateLimits(),
     fetchGrokUsage: () => agent.fetchGrokUsage(),
+    fetchCursorUsage,
   })
   await usageLimits.initialize()
   agent.setClaudeRateLimitListener((info) => usageLimits.recordClaudeRateLimitPush(info))

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ProviderUsageSnapshot, UsageLimitWindow, UsageLimitsSnapshot } from "../../shared/types"
-import { formatResetCountdown, pickUsageLayout, selectComposerUsage, shortUsageLabel } from "./composerUsage"
+import { formatResetCountdown, selectComposerUsage, shortUsageLabel } from "./composerUsage"
 
 function makeWindow(id: string, label: string, usedPercent: number | null): UsageLimitWindow {
   return {
@@ -109,16 +109,5 @@ describe("formatResetCountdown", () => {
     expect(formatResetCountdown(null, now)).toBeNull()
     expect(formatResetCountdown("not a date", now)).toBeNull()
     expect(formatResetCountdown("2026-10-27T11:59:00.000Z", now)).toBeNull()
-  })
-})
-
-describe("pickUsageLayout", () => {
-  test("drops the countdowns before the bars, and only when they don't fit", () => {
-    expect(pickUsageLayout(null, 120, 80)).toBe("full")
-    expect(pickUsageLayout(120, 120, 80)).toBe("full")
-    expect(pickUsageLayout(119, 120, 80)).toBe("compact")
-    expect(pickUsageLayout(80, 120, 80)).toBe("compact")
-    expect(pickUsageLayout(79, 120, 80)).toBe("none")
-    expect(pickUsageLayout(-40, 120, 80)).toBe("none")
   })
 })

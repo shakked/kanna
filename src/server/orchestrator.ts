@@ -16,7 +16,8 @@ import type { ChatChange, ChatCommands } from "./chat-commands"
 import type { EventStore } from "./event-store"
 import type { ChatRecord } from "./events"
 import { renderToolResultContent } from "./handoff"
-import { getServerProviderCatalog, normalizeServerModel, SERVER_PROVIDERS } from "./provider-catalog"
+import { compactModelIds, getServerProviderCatalog, normalizeServerModel, SERVER_PROVIDERS } from "./provider-catalog"
+import { buildEfficiencyContext, buildTokenSaverNotice, type TokenSaverSource } from "./token-efficiency"
 import {
   computeFirstRun,
   MIN_SCHEDULE_INTERVAL_MS,
@@ -127,6 +128,8 @@ interface OrchestratorArgs {
   now?: () => number
   /** Tests shorten it. See `CLOSE_OUT_GRACE_MS`. */
   closeOutGraceMs?: number
+  /** Token Saver Mode's inputs, read when a delegator asks. Absent: the mode is off. */
+  tokenSaver?: () => TokenSaverSource
 }
 
 /**
@@ -426,6 +429,7 @@ export class ChatOrchestrator {
   /** Sub-chats waiting out `closeOutGraceMs` before their last report. See `closeOutDue`. */
   private readonly closeOuts = new Map<string, { ready: boolean; timer?: ReturnType<typeof setTimeout> }>()
   private readonly closeOutGraceMs: number
+  private readonly tokenSaver: (() => TokenSaverSource) | undefined
   private childIndex: { version: number; byParent: Map<string, ChatRecord[]> } | null = null
   private bootSweep: ReturnType<typeof setTimeout> | null = null
 
@@ -437,6 +441,7 @@ export class ChatOrchestrator {
     this.onError = args.onError ?? (() => {})
     this.now = args.now ?? Date.now
     this.closeOutGraceMs = args.closeOutGraceMs ?? CLOSE_OUT_GRACE_MS
+    this.tokenSaver = args.tokenSaver
     this.schedules = new ScheduleRunner({
       store: this.store,
       fire: (schedule) => this.fireSchedule(schedule),
@@ -828,12 +833,32 @@ export class ChatOrchestrator {
         provider: entry.id,
         label: entry.label,
         defaultModel: entry.defaultModel,
-        models: entry.models.map((model) => model.id),
+        models: entry.id === "cursor" ? compactModelIds(entry.models.map((model) => model.id)) : entry.models.map((model) => model.id),
         efforts: entry.efforts.map((effort) => effort.id),
         supportsPlanMode: entry.supportsPlanMode,
       })),
       limits: { maxDepth: MAX_CHAT_DEPTH, maxLiveChats: MAX_LIVE_CHATS },
+      efficiency: this.getEfficiency(),
     }
+  }
+
+  /**
+   * Token Saver Mode's block of `get_context`. Reads the cached usage and asks
+   * for a newer read in the background, so the next call is fresher and this
+   * one never waits on a provider.
+   */
+  private getEfficiency() {
+    const source = this.tokenSaver?.()
+    if (!source?.enabled) return { enabled: false }
+    source.refreshUsage?.()
+    return buildEfficiencyContext({
+      enabled: true,
+      delegatorMode: source.delegatorMode,
+      snapshot: source.snapshot,
+      usageResetDay: source.usageResetDay,
+      now: this.now(),
+      catalog: (provider) => SERVER_PROVIDERS.find((entry) => entry.id === provider),
+    })
   }
 
   listChats(input: {
@@ -1864,6 +1889,13 @@ export class ChatOrchestrator {
         ...paused.map((child) => `${child.title} (chat id ${child.id})`),
         "</system-message>",
       ].join("\n"))
+    }
+    // Token Saver Mode: a delegator's session prompt is fixed, so the setting
+    // and the latest budget reach a running one here.
+    const tokenSaver = this.tokenSaver?.()
+    if (tokenSaver?.enabled && this.store.getChat(chatId)?.delegator) {
+      tokenSaver.refreshUsage?.()
+      notices.push(buildTokenSaverNotice({ snapshot: tokenSaver.snapshot, usageResetDay: tokenSaver.usageResetDay, now: this.now() }))
     }
     return notices
   }

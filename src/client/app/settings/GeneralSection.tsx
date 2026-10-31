@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { DownloadCloud } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { ANALYTICS_STATIC_EVENT_NAMES, ANALYTICS_STATIC_PROPERTY_NAMES } from "../../../shared/analytics"
 import type { EditorPreset } from "../../../shared/protocol"
+import { computeTokenPostures, formatTokenPostureSummary } from "../../../shared/token-efficiency"
 import { DEFAULT_NEW_PROJECTS_DIRECTORY, isNightlyVersion, type PaneVisibilityScope, type SubmitWhileRunning } from "../../../shared/types"
 import { EDITOR_OPTIONS, EditorIcon } from "../../components/editor-icons"
 import { useInstalledEditors } from "../../components/open-external-menu"
@@ -12,6 +13,7 @@ import { Input } from "../../components/ui/input"
 import { Switch } from "../../components/ui/switch"
 import { SelectItem } from "../../components/ui/select"
 import { useTheme, type ThemePreference } from "../../hooks/useTheme"
+import { useUsageLimitsSnapshot } from "../../hooks/useUsageLimitsSnapshot"
 import { cn } from "../../lib/utils"
 import { playChatNotificationSound } from "../../lib/chatSounds"
 import {
@@ -84,7 +86,7 @@ export function GeneralSection({
 }: {
   state: Pick<
     KannaState,
-    "updateSnapshot" | "appSettings" | "handleWriteAppSettings" | "handleCheckForUpdates" | "handleInstallUpdate"
+    "updateSnapshot" | "appSettings" | "handleWriteAppSettings" | "handleCheckForUpdates" | "handleInstallUpdate" | "socket"
   >
   appVersion: string
 }) {
@@ -93,6 +95,15 @@ export function GeneralSection({
   const appSettings = state.appSettings
   const updateSnapshot = state.updateSnapshot
   const handleWriteAppSettings = state.handleWriteAppSettings
+
+  // Subscribed only while Token Saver is on: a usage subscription makes the
+  // server read both providers' limits, which an idle setting shouldn't cost.
+  const tokenSaverEnabled = appSettings?.tokenSaverEnabled === true
+  const usageSnapshot = useUsageLimitsSnapshot(tokenSaverEnabled ? state.socket : null)
+  const tokenSaverSummary = useMemo(
+    () => (tokenSaverEnabled ? formatTokenPostureSummary(computeTokenPostures(usageSnapshot, { usageResetDay: appSettings?.usageResetDay })) : null),
+    [tokenSaverEnabled, usageSnapshot, appSettings?.usageResetDay],
+  )
 
   const scrollbackLines = useTerminalPreferencesStore((store) => store.scrollbackLines)
   const minColumnWidth = useTerminalPreferencesStore((store) => store.minColumnWidth)
@@ -302,6 +313,15 @@ export function GeneralSection({
     }
   }
 
+  async function handleTokenSaverChange(enabled: boolean) {
+    try {
+      setAppSettingsError(null)
+      await handleWriteAppSettings({ tokenSaverEnabled: enabled })
+    } catch (error) {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save chat settings.")
+    }
+  }
+
   async function handleChatTabsChange(enabled: boolean) {
     try {
       setAppSettingsError(null)
@@ -315,6 +335,15 @@ export function GeneralSection({
     try {
       setAppSettingsError(null)
       await handleWriteAppSettings({ widgetsPeekEnabled: enabled })
+    } catch (error) {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save appearance settings.")
+    }
+  }
+
+  async function handleChatCpuChange(enabled: boolean) {
+    try {
+      setAppSettingsError(null)
+      await handleWriteAppSettings({ chatCpuEnabled: enabled })
     } catch (error) {
       setAppSettingsError(error instanceof Error ? error.message : "Unable to save appearance settings.")
     }
@@ -428,6 +457,15 @@ export function GeneralSection({
               aria-label={SETTINGS_ROWS.widgetsPeek.title}
             />
           </SettingsRow>
+          <SettingsRow def={SETTINGS_ROWS.chatCpu}>
+            <Switch
+              checked={appSettings?.chatCpuEnabled === true}
+              onCheckedChange={(checked) => {
+                void handleChatCpuChange(checked)
+              }}
+              aria-label={SETTINGS_ROWS.chatCpu.title}
+            />
+          </SettingsRow>
         </SettingsGroup>
 
         <SettingsGroup title="Notifications">
@@ -481,6 +519,26 @@ export function GeneralSection({
                 void handleDelegatorModeChange(checked)
               }}
               aria-label={SETTINGS_ROWS.delegatorMode.title}
+            />
+          </SettingsRow>
+          <SettingsRow
+            def={SETTINGS_ROWS.tokenSaver}
+            description={(
+              <>
+                {SETTINGS_ROWS.tokenSaver.description}
+                {tokenSaverSummary ? <span className="mt-1 block font-medium text-foreground">{tokenSaverSummary}</span> : null}
+                {appSettings?.delegatorMode === false ? (
+                  <span className="mt-1 block">Delegator Mode is off. Token Saver only affects delegator chats.</span>
+                ) : null}
+              </>
+            )}
+          >
+            <Switch
+              checked={tokenSaverEnabled}
+              onCheckedChange={(checked) => {
+                void handleTokenSaverChange(checked)
+              }}
+              aria-label={SETTINGS_ROWS.tokenSaver.title}
             />
           </SettingsRow>
           <SettingsRow def={SETTINGS_ROWS.submitWhileRunning}>

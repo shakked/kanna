@@ -1,10 +1,54 @@
-import { deriveModelLabel } from "../../shared/types"
-import type { AgentProvider, UsageLimitWindow, UsageLimitsSnapshot } from "../../shared/types"
+import { DEFAULT_USAGE_RESET_DAY, deriveModelLabel } from "../../shared/types"
+import type { AgentProvider, UsageLimitCredits, UsageLimitWindow, UsageLimitsSnapshot } from "../../shared/types"
 
 export interface ComposerUsageRow {
   window: UsageLimitWindow
-  /** A row label just long enough to tell the stack apart: "5h", "Wk", "Opus". */
+  /**
+   * A row label just long enough to tell the stack apart: "5h", "Wk", "Opus".
+   * Empty on the spend-cap row, whose left cell is its reset countdown.
+   */
   shortLabel: string
+  /** Set on the spend-cap row: `window` is then the cap's percent, with no reset. */
+  credits?: UsageLimitCredits
+  /**
+   * The spend cap's next reset, ISO 8601: assumed from the monthly reset day
+   * setting, since the usage API reports none. Kept off `window.resetsAt`, so
+   * it never zeroes the percent when the assumed day passes.
+   */
+  assumedResetsAt?: string
+  /** The spend cap's real next reset, ISO 8601, when the provider reports it (Codex). */
+  resetsAt?: string
+}
+
+/** The next time the local clock reads midnight on `day` of a month, after `now`. */
+export function nextMonthlyReset(day: number, now: number = Date.now()): string {
+  const today = new Date(now)
+  const thisMonth = new Date(today.getFullYear(), today.getMonth(), day)
+  const next = thisMonth.getTime() > now ? thisMonth : new Date(today.getFullYear(), today.getMonth() + 1, day)
+  return next.toISOString()
+}
+
+/**
+ * A spend cap (Claude Enterprise extra usage) as a meter row, for plans that
+ * report no time windows. Null when the cap has no percent to draw.
+ */
+function creditsRow(provider: AgentProvider, credits: UsageLimitCredits | null, resetDay: number, now: number): ComposerUsageRow | null {
+  if (!credits || credits.usedPercent === null) return null
+  return {
+    window: {
+      id: "credits",
+      // Claude's cap is `extra_usage.monthly_limit`.
+      label: provider === "claude" ? "Monthly spend limit" : credits.label,
+      usedPercent: credits.usedPercent,
+      resetsAt: null,
+      recordedAt: credits.recordedAt,
+      source: credits.source,
+    },
+    shortLabel: "",
+    credits,
+    ...(provider === "claude" ? { assumedResetsAt: nextMonthlyReset(resetDay, now) } : {}),
+    ...(credits.resetsAt ? { resetsAt: credits.resetsAt } : {}),
+  }
 }
 
 /** Model-specific Claude weekly windows and the model family each one limits. */
@@ -97,15 +141,18 @@ export function shortUsageLabel(window: UsageLimitWindow): string {
 }
 
 /**
- * Every limit on the composer's provider and model, shortest window first,
- * or null when that provider reports none. The server keeps every window it
- * has seen (`mergeUsageWindows`), so the rows stay put between reads.
+ * Every limit on `provider` (for `model`, or the ones every model shares when
+ * it is null), shortest window first, or null when that provider reports
+ * none. The server keeps every window it has seen (`mergeUsageWindows`), so
+ * the rows stay put between reads. With no windows, a spend cap stands in as
+ * the one row.
  */
 export function selectComposerUsage(
   snapshot: UsageLimitsSnapshot | null,
   provider: AgentProvider,
   model: string | null,
   now: number = Date.now(),
+  usageResetDay: number = DEFAULT_USAGE_RESET_DAY,
 ): ComposerUsageRow[] | null {
   const providerSnapshot = snapshot?.providers.find((entry) => entry.provider === provider)
   if (!providerSnapshot || providerSnapshot.status !== "ok") return null
@@ -115,18 +162,7 @@ export function selectComposerUsage(
     .map((window, index) => ({ window, index, minutes: windowMinutes(window) }))
     .sort((a, b) => a.minutes - b.minutes || a.index - b.index)
     .map(({ window }) => ({ window, shortLabel: shortUsageLabel(window) }))
-  return rows.length > 0 ? rows : null
-}
-
-export type ComposerUsageLayout = "full" | "compact" | "none"
-
-/**
- * How the usage stack fits in `room` px: whole ("full"), without the reset
- * countdowns ("compact", dropped from every row at once so the rows stay
- * alike), or not at all. `room` null means unconstrained.
- */
-export function pickUsageLayout(room: number | null, fullWidth: number, compactWidth: number): ComposerUsageLayout {
-  if (room === null || room >= fullWidth) return "full"
-  if (room >= compactWidth) return "compact"
-  return "none"
+  if (rows.length > 0) return rows
+  const spendCap = creditsRow(provider, providerSnapshot.credits, usageResetDay, now)
+  return spendCap ? [spendCap] : null
 }

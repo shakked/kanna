@@ -1344,6 +1344,14 @@ export const DEFAULT_NEW_PROJECTS_DIRECTORY = "~/Kanna"
 
 /** Bounds of `idleSessionTimeoutMinutes`. 0 closes an idle session as soon as its turn ends. */
 export const DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES = 5
+
+/**
+ * Day of the month (local time) Claude's monthly spend cap is assumed to reset
+ * on. The usage API reports no reset date for it, so this is the user's guess.
+ */
+export const DEFAULT_USAGE_RESET_DAY = 1
+export const MIN_USAGE_RESET_DAY = 1
+export const MAX_USAGE_RESET_DAY = 28
 export const MIN_IDLE_SESSION_TIMEOUT_MINUTES = 0
 export const MAX_IDLE_SESSION_TIMEOUT_MINUTES = 1440
 
@@ -1423,6 +1431,12 @@ export interface AppSettingsSnapshot {
    */
   delegatorMode?: boolean
   /**
+   * Token Saver Mode: a delegator's agent is told how freely each provider's
+   * plan can be spent (from usage and time to reset) and routes sub-chats by
+   * it. Off unless true, and absent when off.
+   */
+  tokenSaverEnabled?: boolean
+  /**
    * Show the chats you have open as tabs in the chat's title bar, in place of
    * the one chat's title. Off unless true, and absent when off. The tabs
    * themselves are each browser's own; this is only whether to show them.
@@ -1434,6 +1448,15 @@ export interface AppSettingsSnapshot {
    * Off unless true, and absent when off.
    */
   widgetsPeekEnabled?: boolean
+  /** Show the plan-usage block in the sidebar. Off unless true, and absent when off. */
+  sidebarUsageEnabled?: boolean
+  /**
+   * Show each chat's CPU on its sidebar row, and sample it. Off unless true,
+   * and absent when off.
+   */
+  chatCpuEnabled?: boolean
+  /** Assumed monthly reset day of the spend cap, 1–28. Absent when it is the default. */
+  usageResetDay?: number
   /** Base directory where cloned and newly created projects are placed. */
   newProjectsDirectory: string
   /**
@@ -1488,8 +1511,12 @@ export interface AppSettingsPatch {
   newSidebarEnabled?: boolean
   projectIconsInChats?: boolean
   delegatorMode?: boolean
+  tokenSaverEnabled?: boolean
   chatTabsEnabled?: boolean
   widgetsPeekEnabled?: boolean
+  sidebarUsageEnabled?: boolean
+  chatCpuEnabled?: boolean
+  usageResetDay?: number
   newProjectsDirectory?: string
   setupShown?: boolean
   setupCompleted?: boolean
@@ -1558,6 +1585,10 @@ export interface UsageLimitCredits {
   currency: string | null
   /** Free-form fallback description when amounts aren't numeric (e.g. "Unlimited"). */
   detail: string | null
+  /** The cap's real next reset, ISO 8601, when the provider reports one (Codex). Claude's is assumed client-side. */
+  resetsAt?: string | null
+  /** The provider says the cap is hit, whatever the percent reads. */
+  limitReached?: boolean
   recordedAt: string
   source: UsageLimitSource
 }

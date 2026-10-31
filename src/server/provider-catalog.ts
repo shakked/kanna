@@ -332,6 +332,32 @@ export function applyCursorModels(models: ReadonlyArray<CursorCliModelInfo>): bo
   return true
 }
 
+// The effort word a Cursor model id carries ("claude-opus-5-5-high",
+// "claude-4.6-opus-high-thinking", "gpt-5.5-extra-high"). It sits as a whole
+// hyphen-separated segment, anywhere in the id.
+const CURSOR_EFFORT_SEGMENT = /(?<=^|-)(?:none|minimal|low|medium|high|xhigh|extra-high|max)(?=-|$)/g
+
+/**
+ * A model list for an agent to read, cheaply. Cursor lists one id per effort
+ * level of a model, so those fold into one template with the effort in braces:
+ * `claude-opus-5-5-{low|medium|high|xhigh|max}`. Fill the braces with one of
+ * the options and the result is an id the provider lists, because only listed
+ * combinations are folded. A model with one id stays plain. Order follows the
+ * list.
+ */
+export function compactModelIds(ids: readonly string[]): string[] {
+  const groups = new Map<string, { efforts: string[]; ids: string[] }>()
+  for (const id of ids) {
+    const match = [...id.matchAll(CURSOR_EFFORT_SEGMENT)].at(-1)
+    const key = match ? `${id.slice(0, match.index)}{}${id.slice(match.index + match[0].length)}` : id
+    const group = groups.get(key) ?? { efforts: [], ids: [] }
+    group.ids.push(id)
+    if (match) group.efforts.push(match[0])
+    groups.set(key, group)
+  }
+  return [...groups].map(([key, group]) => (group.ids.length > 1 ? key.replace("{}", `{${group.efforts.join("|")}}`) : group.ids[0]!))
+}
+
 export function getServerProviderCatalog(provider: AgentProvider): ProviderCatalogEntry {
   const entry = SERVER_PROVIDERS.find((candidate) => candidate.id === provider)
   if (!entry) {

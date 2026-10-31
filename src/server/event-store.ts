@@ -23,7 +23,6 @@ import {
   cloneTranscriptEntries,
   cloneTranscriptEntriesForClient,
   createEmptyState,
-  tracksUnread,
 } from "./events"
 import { resolveLocalPath } from "./paths"
 // The sidebar's own quantization, imported rather than duplicated so the two
@@ -533,8 +532,7 @@ export class EventStore {
         const { touchedPaths, ...rest } = chat
         this.state.chatsById.set(chat.id, {
           ...rest,
-          // A snapshot from before `tracksUnread` can hold a mark on a sub-chat.
-          unread: (chat.unread ?? false) && tracksUnread(chat),
+          unread: chat.unread ?? false,
           readAnchor: chat.readAnchor ?? null,
           pendingForkSessionToken: chat.pendingForkSessionToken ?? null,
           // Snapshots written before base blobs carry bare paths; they keep
@@ -829,15 +827,6 @@ export class EventStore {
         // Where the chat is shown, not activity in it: `updatedAt` stays put.
         if (event.hidden) chat.hidden = true
         else delete chat.hidden
-        if (!tracksUnread(chat)) chat.unread = false
-        break
-      }
-      case "chat_next_run_set": {
-        const chat = this.state.chatsById.get(event.chatId)
-        if (!chat) break
-        // A setting, not activity: `updatedAt` stays put so the sidebar does not reorder.
-        if (event.nextRun) chat.nextRun = event.nextRun
-        else delete chat.nextRun
         break
       }
       case "chat_next_run_set": {
@@ -878,7 +867,6 @@ export class EventStore {
         else delete chat.parentChatId
         if (event.parentChatId && event.adopted) chat.adopted = true
         else delete chat.adopted
-        if (!tracksUnread(chat)) chat.unread = false
         break
       }
       case "schedule_set": {
@@ -951,7 +939,7 @@ export class EventStore {
       case "chat_read_state_set": {
         const chat = this.state.chatsById.get(event.chatId)
         if (!chat) break
-        chat.unread = event.unread && tracksUnread(chat)
+        chat.unread = event.unread
         chat.updatedAt = event.timestamp
         break
       }
@@ -1051,7 +1039,7 @@ export class EventStore {
         const chat = this.state.chatsById.get(event.chatId)
         if (!chat) break
         chat.updatedAt = event.timestamp
-        chat.unread = tracksUnread(chat)
+        chat.unread = true
         chat.lastTurnOutcome = "success"
         chat.lastTurnEndedAt = event.timestamp
         break
@@ -1060,7 +1048,7 @@ export class EventStore {
         const chat = this.state.chatsById.get(event.chatId)
         if (!chat) break
         chat.updatedAt = event.timestamp
-        chat.unread = tracksUnread(chat)
+        chat.unread = true
         chat.lastTurnOutcome = "failed"
         chat.lastTurnEndedAt = event.timestamp
         break

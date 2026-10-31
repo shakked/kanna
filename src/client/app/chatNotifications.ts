@@ -7,7 +7,10 @@ function getSidebarGroupChats(group: SidebarProjectGroup): SidebarChatRow[] {
   return [...group.chats, ...(group.archivedChats ?? [])]
 }
 
-/** See `isUnreadForUser`. A sub-chat that stops to ask something still counts as waiting, below. */
+/**
+ * See `isUnreadForUser`. A hidden chat that stops to ask something still counts
+ * as waiting, below.
+ */
 const countsAsUnread = isUnreadForUser
 
 export function getNotificationTitleCount(sidebarData: SidebarData) {

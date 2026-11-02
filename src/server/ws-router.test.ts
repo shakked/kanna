@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
-import type { AppSettingsSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, SidebarData, UpdateSnapshot } from "../shared/types"
+import type { AppSettingsSnapshot, ChatSnapshot, KannaStatus, KeybindingsSnapshot, LlmProviderSnapshot, SidebarData, UpdateSnapshot } from "../shared/types"
 import { applySidebarPatch, type SidebarPatch } from "../shared/sidebar-patch"
 import { PROTOCOL_VERSION } from "../shared/types"
 import { findTranscriptWindowStart } from "../shared/transcript-window"
+import { TurnFoldCache } from "./turn-folds"
+import { foldChatSnapshot } from "../client/app/snapshotEquality"
 import { createEmptyState } from "./events"
 import { EventStore } from "./event-store"
 import { deriveLocalProjectsSnapshot } from "./read-models"
@@ -2702,6 +2704,147 @@ describe("transcript windows", () => {
     await router.handleMessage(ws as never, JSON.stringify({ v: 1, type: "command", id: "older-2", command: { type: "chat.loadOlder", chatId: "chat-1", untilMessageId: "p1" } }))
     expect(chatData(ws, 3).messages.map((entry) => entry._id)).toEqual(["p1", "a1", "b1"])
     expect(ws.sent[4]).toEqual({ v: PROTOCOL_VERSION, type: "ack", id: "older-2", result: { startIndex: 0 } })
+  })
+
+  describe("turn folds", () => {
+    /** A turn that folds: its work, then its reply and its end. */
+    function workTurn(n: number, at: number) {
+      return [
+        { _id: `p${n}`, createdAt: at, kind: "user_prompt", content: `question ${n}` },
+        { _id: `a${n}`, createdAt: at + 1, kind: "assistant_text", text: "Looking." },
+        { _id: `c${n}`, createdAt: at + 2, kind: "tool_call", tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: `t${n}`, input: {} } },
+        { _id: `r${n}`, createdAt: at + 3, kind: "tool_result", toolId: `t${n}`, content: "ok" },
+        { _id: `b${n}`, createdAt: at + 4, kind: "assistant_text", text: `Answer ${n}.` },
+        { _id: `e${n}`, createdAt: at + 5, kind: "result", subtype: "success", isError: false, durationMs: 5, result: "" },
+      ]
+    }
+
+    /**
+     * A router over a store that behaves as the EventStore does: a push
+     * clones only the tail past what the socket holds, and the folds come
+     * from the real cache. The fake above clones everything, which is how
+     * folds cut to the cloned tail went unseen.
+     */
+    function foldRouter(entries: Array<Record<string, unknown>>, status: { value: string }) {
+      const state = createEmptyState()
+      state.projectsById.set("project-1", { id: "project-1", localPath: "/tmp/project", title: "Project", createdAt: 1, updatedAt: 1 })
+      state.chatsById.set("chat-1", {
+        id: "chat-1", projectId: "project-1", title: "Chat", createdAt: 1, updatedAt: 1, unread: false,
+        provider: null, planMode: false, autoPlan: false, sessionToken: null, lastTurnOutcome: null,
+      })
+      const typed = entries as never[]
+      const folds = new TurnFoldCache()
+      const store = createFakeStore({
+        state,
+        getChat: (chatId: string) => state.chatsById.get(chatId) ?? null,
+        getProject: (projectId: string) => state.projectsById.get(projectId) ?? null,
+        getTranscriptLength: () => entries.length,
+        getClientTranscript: (_chatId: string, fromIndex = 0, options?: { status?: KannaStatus; foldsFrom?: number }) => ({
+          messages: entries.slice(fromIndex),
+          startIndex: fromIndex,
+          readAnchor: null,
+          ...(options?.status ? { turnFolds: folds.get(typed, options.status, options.foldsFrom ?? fromIndex) } : {}),
+        }),
+        getEntryIdAt: (_chatId: string, index: number) => (entries[index] as { _id?: string } | undefined)?._id ?? null,
+        getInitialTranscriptWindowStart: (_chatId: string, assistantMessages: number) =>
+          findTranscriptWindowStart(typed, { endExclusive: entries.length, assistantMessages }),
+        widenTranscriptWindowStart: (_chatId: string, current: number, options: { assistantMessages: number }) =>
+          findTranscriptWindowStart(typed, { endExclusive: current, assistantMessages: options.assistantMessages }),
+      })
+      return createTestRouter({
+        store,
+        agent: { getActiveStatuses: () => new Map([["chat-1", status.value]]), getDrainingChatIds: () => new Set() } as never,
+        appSettings: createFakeAppSettings({
+          getSnapshot: () => ({ ...DEFAULT_APP_SETTINGS_SNAPSHOT, transcript: { windowAssistantMessages: 2 } }),
+        }),
+      })
+    }
+
+    /** What a client holds after every push so far, folded as the web client folds them. */
+    function held(ws: FakeWebSocket) {
+      let snapshot: ChatSnapshot | null = null
+      for (const message of ws.sent as Array<{ type?: string; snapshot?: { data: ChatSnapshot } }>) {
+        if (message.type === "snapshot" && message.snapshot) snapshot = foldChatSnapshot(snapshot, null, message.snapshot.data)
+      }
+      return snapshot!
+    }
+
+    test("a folded turn stays folded and unchanged through loadOlder, the next turn and its end, and a reconnect", async () => {
+      const entries: Array<Record<string, unknown>> = [...workTurn(1, 100), ...workTurn(2, 200), ...workTurn(3, 300)]
+      const status = { value: "idle" }
+      const router = foldRouter(entries, status)
+      const ws = new FakeWebSocket()
+      router.handleOpen(ws as never)
+      await router.handleMessage(ws as never, JSON.stringify({ v: 1, type: "subscribe", id: "sub", topic: { type: "chat", chatId: "chat-1" } }))
+
+      // The window opens on turn 3, which has ended.
+      const p3 = held(ws).turnFolds!.folds.p3!
+      expect(p3.replyEntryId).toBe("b3")
+      expect(held(ws).turnFolds!.runningTurnId).toBeUndefined()
+
+      // Older history brings turn 2's fold; turn 3's is untouched.
+      await router.handleMessage(ws as never, JSON.stringify({ v: 1, type: "command", id: "older", command: { type: "chat.loadOlder", chatId: "chat-1" } }))
+      await router.broadcastSnapshots()
+      const p2 = held(ws).turnFolds!.folds.p2!
+      expect(p2.replyEntryId).toBe("b2")
+      expect(held(ws).turnFolds!.folds.p3).toEqual(p3)
+
+      // The next turn starts. This is where the earlier folds used to go.
+      const next = workTurn(4, 400)
+      entries.push(next[0]!)
+      status.value = "running"
+      await router.broadcastSnapshots()
+      expect(held(ws).turnFolds!.folds.p3).toEqual(p3)
+      expect(held(ws).turnFolds!.folds.p2).toEqual(p2)
+      expect(held(ws).turnFolds!.runningTurnId).toBe("p4")
+      expect(held(ws).turnFolds!.workingSince).toBe(400)
+
+      // It streams: no fold for it, and nothing else moves.
+      for (const entry of next.slice(1, -1)) {
+        entries.push(entry)
+        await router.broadcastSnapshots()
+        expect(held(ws).turnFolds!.folds.p4).toBeUndefined()
+        expect(held(ws).turnFolds!.folds.p3).toEqual(p3)
+      }
+
+      // It ends: it folds, and the others are as they were.
+      entries.push(next[next.length - 1]!)
+      status.value = "idle"
+      await router.broadcastSnapshots()
+      const ended = held(ws).turnFolds!
+      expect(ended.runningTurnId).toBeUndefined()
+      expect(ended.folds.p4?.replyEntryId).toBe("b4")
+      expect(ended.folds.p3).toEqual(p3)
+      expect(ended.folds.p2).toEqual(p2)
+
+      // A reconnect (or a reload) gets the same folds for its window.
+      const again = new FakeWebSocket()
+      router.handleOpen(again as never)
+      await router.handleMessage(again as never, JSON.stringify({ v: 1, type: "subscribe", id: "sub", topic: { type: "chat", chatId: "chat-1" } }))
+      expect(held(again).turnFolds!.folds.p4).toEqual(ended.folds.p4!)
+    })
+
+    test("an incremental push carries only the folds the client has not had", async () => {
+      const entries: Array<Record<string, unknown>> = [...workTurn(1, 100), ...workTurn(2, 200)]
+      const status = { value: "idle" }
+      const router = foldRouter(entries, status)
+      const ws = new FakeWebSocket()
+      router.handleOpen(ws as never)
+      await router.handleMessage(ws as never, JSON.stringify({ v: 1, type: "subscribe", id: "sub", topic: { type: "chat", chatId: "chat-1" } }))
+
+      const next = workTurn(3, 300)
+      entries.push(next[0]!)
+      status.value = "running"
+      await router.broadcastSnapshots()
+      const started = (ws.sent.at(-1) as { snapshot: { data: ChatSnapshot } }).snapshot.data
+      expect(started.incremental).toBe(true)
+      expect(started.turnFolds).toEqual({ folds: {}, runningTurnId: "p3", workingSince: 300 })
+
+      // A streamed entry with nothing new about the folds leaves them out.
+      entries.push(next[1]!)
+      await router.broadcastSnapshots()
+      expect((ws.sent.at(-1) as { snapshot: { data: ChatSnapshot } }).snapshot.data.turnFolds).toBeUndefined()
+    })
   })
 
   test("a cached span reaching further back than the default keeps the client's window", async () => {

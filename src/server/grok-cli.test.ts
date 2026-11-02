@@ -396,9 +396,11 @@ describe("inspect skills / auth token / billing windows", () => {
 describe("GrokCliManager.startTurn", () => {
   test("spawns grok with streaming-json, prompt-file, model, and always-approve", async () => {
     const argvCalls: string[][] = []
+    const envs: Array<Record<string, string> | undefined> = []
     const manager = new GrokCliManager({
-      spawnProcess: ({ argv }) => {
+      spawnProcess: ({ argv, env }) => {
         argvCalls.push(argv)
+        envs.push(env)
         const stdout = new PassThrough()
         const stderr = new PassThrough()
         const stdin = new PassThrough()
@@ -430,7 +432,10 @@ describe("GrokCliManager.startTurn", () => {
       planMode: false,
       sessionToken: "sess-old",
       forkSession: true,
+      env: { KANNA_TOOLS_AUTH: "abc" },
     })
+    // Grok takes no MCP tools: its shell reaches them with this (kanna-tool-gateway.ts).
+    expect(envs[0]).toEqual({ KANNA_TOOLS_AUTH: "abc" })
     const events: HarnessEvent[] = []
     for await (const event of turn.stream) events.push(event)
 
@@ -559,6 +564,34 @@ describe("GrokCliManager.startTurn", () => {
       const events: HarnessEvent[] = []
       for await (const event of turn.stream) events.push(event)
       expect(transcriptEntries(events).filter((entry) => entry.kind === "result")).toHaveLength(1)
+    })
+
+    test("the end of the turn carries how long it ran, which the CLI does not report", async () => {
+      const turn = await new GrokCliManager({
+        spawnProcess: () => {
+          const stdout = new PassThrough()
+          const closeListeners: Array<(code: number | null) => void> = []
+          setTimeout(() => {
+            stdout.write(`{"type":"end","stopReason":"end_turn","sessionId":"sess-1"}\n`)
+            stdout.end()
+            setTimeout(() => { for (const listener of closeListeners) listener(0) }, 10)
+          }, 40)
+          return {
+            stdin: new PassThrough(),
+            stdout,
+            stderr: new PassThrough(),
+            kill: () => true,
+            once: (event: "close" | "error", listener: (code: number | null) => void) => {
+              if (event === "close") closeListeners.push(listener)
+              return undefined
+            },
+          } as unknown as GrokChildProcess
+        },
+      }).startTurn({ ...startArgs, planMode: false })
+      const events: HarnessEvent[] = []
+      for await (const event of turn.stream) events.push(event)
+      const result = transcriptEntries(events).find((entry) => entry.kind === "result")
+      expect(result?.kind === "result" ? result.durationMs : 0).toBeGreaterThanOrEqual(30)
     })
 
     test("outside plan mode the stream passes through untouched", async () => {

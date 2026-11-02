@@ -1457,6 +1457,19 @@ export interface AppSettingsSnapshot {
   chatCpuEnabled?: boolean
   /** Assumed monthly reset day of the spend cap, 1–28. Absent when it is the default. */
   usageResetDay?: number
+  /**
+   * Start agents without the MCP servers the user configured outside Kanna
+   * (Claude's `~/.claude.json`, `.mcp.json`, plugins and claude.ai connectors;
+   * Codex's `mcp_servers`, plugin servers and apps). Kanna's own tools stay.
+   * Read when a turn starts. Off unless true, and absent when off.
+   */
+  disablePreconfiguredMcp?: boolean
+  /**
+   * Hide the sidebar's "Setup Kanna Cloud" prompt, for installs where Kanna
+   * Cloud isn't allowed. Pairing stays reachable from Settings. Off unless
+   * true, and absent when off.
+   */
+  cloudSetupDismissed?: boolean
   /** Base directory where cloned and newly created projects are placed. */
   newProjectsDirectory: string
   /**
@@ -1517,6 +1530,8 @@ export interface AppSettingsPatch {
   sidebarUsageEnabled?: boolean
   chatCpuEnabled?: boolean
   usageResetDay?: number
+  disablePreconfiguredMcp?: boolean
+  cloudSetupDismissed?: boolean
   newProjectsDirectory?: string
   setupShown?: boolean
   setupCompleted?: boolean
@@ -2817,6 +2832,85 @@ export interface ChatSnapshot {
    * any push where it changed; absent means "same as last time".
    */
   outline?: TranscriptOutlineEntry[]
+  /**
+   * Which finished turns fold behind a "Worked for" header, decided by the
+   * server (server/turn-folds.ts) so every client folds the same way. Whole
+   * on a full snapshot. On an incremental push, only the folds that are new to
+   * the client, and only when something is new; absent means nothing changed.
+   * A server that predates folding never sends it, and a client then draws
+   * the transcript whole.
+   */
+  turnFolds?: ChatTurnFolds
+}
+
+/** How a folded turn ended, as its header says it. */
+export type TurnFoldOutcome = "completed" | "failed" | "stopped"
+
+/**
+ * One finished turn that folds: everything from a prompt someone sent to the
+ * next one, less the prompt and the model rows right after it. Named by entry
+ * ids, so a client places it in whatever window it holds.
+ */
+export interface TranscriptTurnFold {
+  /** The id of the prompt that opened the turn. Also what an open fold is remembered by. */
+  id: string
+  /** The first entry inside the fold: its header goes before it. */
+  firstEntryId: string
+  /** The last entry of the turn. */
+  lastEntryId: string
+  outcome: TurnFoldOutcome
+  /** Time the agent spent working; absent when not known. */
+  workedMs?: number
+  /** The turn's last text, drawn whether the fold is open or not. */
+  replyEntryId?: string
+  /** The result that ends the turn: its rule, drawn either way, without the time the header says. */
+  endEntryId?: string
+  /**
+   * Other entries drawn either way: pictures, files, visualizations, chat
+   * and schedule cards, a plan nothing came after, errors, compaction and
+   * model rows. Everything else between the first and last entry is drawn
+   * only while the fold is open.
+   */
+  keptEntryIds: string[]
+  /**
+   * One card per sub-chat the turn dealt with, in the order they first came
+   * up: drawn while the fold is closed, in place of the chat calls and report
+   * lines it stands for (which are left out of `keptEntryIds`). Open, the
+   * fold shows those as they happened instead.
+   */
+  chatCards?: TurnFoldChatCard[]
+}
+
+/** A sub-chat a folded turn started, messaged or heard from, as one card. */
+export interface TurnFoldChatCard {
+  chatId: string
+  /** The first entry that dealt with it: the card stands where that entry was. */
+  anchorEntryId: string
+  /** The last thing that passed between them in the turn. */
+  last: "started" | "forked" | "sent" | "replied"
+  lastEntryId: string
+  /** One line of it: what was sent, or what the chat replied. */
+  preview?: string
+  /** What the call that started it named it, for until the sidebar can. */
+  title?: string
+}
+
+/**
+ * The turn folds of the transcript a snapshot holds. The turn in progress is
+ * not folded; every other turn is, from the moment it ends, and its fold
+ * never changes after that.
+ */
+export interface ChatTurnFolds {
+  /**
+   * The folds, by turn (the id of the prompt that opened it). On a full
+   * snapshot, every fold of the window. On an incremental push, only folds
+   * the client has not had: a client adds them to what it holds.
+   */
+  folds: Record<string, TranscriptTurnFold>
+  /** The turn in progress, when one is: drawn whole, whatever fold a client still holds for it. */
+  runningTurnId?: string
+  /** While a turn runs: when it started, for the "Working for 1m 3s" line. */
+  workingSince?: number
 }
 
 /** One turn of a chat, as the outline names it. */

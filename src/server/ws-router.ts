@@ -88,6 +88,13 @@ export interface ClientState {
    * incremental push carries it whenever this differs from what is current.
    */
   chatProvidersSent?: Map<string, string>
+  /**
+   * The turn folds a chat subscription has been sent, by fold, serialized,
+   * and the running turn it was last told of. A fold never changes once its
+   * turn has ended, so an incremental push carries only the folds not yet
+   * sent; the client adds them to what it holds.
+   */
+  chatTurnFoldsSent?: Map<string, { folds: Map<string, string>; running: string }>
   chatFollowing?: Map<string, boolean>
   chatWindowChecks?: Map<string, number>
   protectedDraftChatIds?: Set<string>
@@ -687,7 +694,7 @@ export function createWsRouter({
           getChatStatuses(),
           agent.getDrainingChatIds(),
           topic.chatId,
-          (chatId) => store.getClientTranscript(chatId),
+          (chatId, options) => store.getClientTranscript(chatId, 0, options),
           agent.getSubagents?.(topic.chatId),
           agent.getWaitingOn?.(topic.chatId)
         ),
@@ -723,7 +730,9 @@ export function createWsRouter({
       getChatStatuses(),
       agent.getDrainingChatIds(),
       chatId,
-      (id) => store.getClientTranscript(id, fromIndex ?? getEarliestChatWindowStart(id)),
+      // The folds cover the widest window any socket holds; one a socket's
+      // window does not reach is ignored by its client.
+      (id, options) => store.getClientTranscript(id, fromIndex ?? getEarliestChatWindowStart(id), { ...options, foldsFrom: getEarliestChatWindowStart(id) }),
       agent.getSubagents?.(chatId),
       agent.getWaitingOn?.(chatId)
     )
@@ -930,11 +939,31 @@ export function createWsRouter({
         const data = full ? sliceChatWindow(full, windowStart) : full
         const outlineCounts = ensureChatOutlineCounts(ws)
         const providersSent = ensureChatProvidersSent(ws)
+        const foldsSent = (ws.data.chatTurnFoldsSent ??= new Map())
         let body = toSocketChatSnapshot(data, advanced ? undefined : previous)
         // The outline is a few KB and would otherwise ride every streamed
         // push; an incremental body carries it only when a prompt was added.
         const outlineCount = data?.outline?.length ?? 0
         const providersJson = JSON.stringify(data?.availableProviders ?? null)
+        // A full body sends every fold; an incremental one, the new ones.
+        const foldsHeld = body?.incremental ? foldsSent.get(id) : undefined
+        const foldsNow = { folds: new Map(foldsHeld?.folds), running: "" }
+        if (body && data?.turnFolds) {
+          const { folds, ...running } = data.turnFolds
+          foldsNow.running = JSON.stringify(running)
+          const fresh: Record<string, (typeof folds)[string]> = {}
+          for (const [foldId, fold] of Object.entries(folds)) {
+            const json = JSON.stringify(fold)
+            if (foldsNow.folds.get(foldId) === json) continue
+            foldsNow.folds.set(foldId, json)
+            fresh[foldId] = fold
+          }
+          if (body.incremental) {
+            const changed = Object.keys(fresh).length > 0 || foldsNow.running !== foldsHeld?.running
+            const { turnFolds, ...withoutFolds } = body
+            body = (changed ? { ...withoutFolds, turnFolds: { ...running, folds: fresh } } : withoutFolds) as typeof body
+          }
+        }
         if (body?.incremental) {
           // The read anchor never changes mid-chat, and the client latches it
           // from the first full snapshot (`foldChatSnapshot` carries it forward).
@@ -968,10 +997,12 @@ export function createWsRouter({
           spans.set(id, { start: windowStart, end: data.startIndex + data.messages.length })
           outlineCounts.set(id, outlineCount)
           providersSent.set(id, providersJson)
+          foldsSent.set(id, foldsNow)
         } else {
           spans.delete(id)
           outlineCounts.delete(id)
           providersSent.delete(id)
+          foldsSent.delete(id)
         }
         sendSerializedSnapshot(ws, id, snapshotJson)
         diagnostics?.record("chat_snapshot_ms", performance.now() - started)
@@ -2163,6 +2194,7 @@ export function createWsRouter({
       ws.data.chatEntrySpans?.clear()
       ws.data.chatProvidersSent?.clear()
       ws.data.chatOutlineCounts?.clear()
+      ws.data.chatTurnFoldsSent?.clear()
       ws.data.chatWindowStarts?.clear()
       ws.data.chatFollowing?.clear()
       ws.data.chatWindowChecks?.clear()
@@ -2206,6 +2238,7 @@ export function createWsRouter({
         ws.data.chatEntrySpans?.delete(parsed.id)
         ws.data.chatWindowStarts?.delete(parsed.id)
         ws.data.chatOutlineCounts?.delete(parsed.id)
+        ws.data.chatTurnFoldsSent?.delete(parsed.id)
         ws.data.chatProvidersSent?.delete(parsed.id)
         ws.data.chatFollowing?.delete(parsed.id)
         ws.data.chatWindowChecks?.delete(parsed.id)
@@ -2270,6 +2303,7 @@ export function createWsRouter({
         ws.data.chatEntrySpans?.delete(parsed.id)
         ws.data.chatWindowStarts?.delete(parsed.id)
         ws.data.chatOutlineCounts?.delete(parsed.id)
+        ws.data.chatTurnFoldsSent?.delete(parsed.id)
         ws.data.chatProvidersSent?.delete(parsed.id)
         ws.data.chatFollowing?.delete(parsed.id)
         ws.data.chatWindowChecks?.delete(parsed.id)

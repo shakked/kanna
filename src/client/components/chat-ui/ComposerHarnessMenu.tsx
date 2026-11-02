@@ -162,6 +162,15 @@ export function HarnessStatusMarks({
   )
 }
 
+/** Fast mode's bolt: solid, as iOS's bolt.fill. Nucleo UI Essential "bolt", licensed to Jake. */
+function FastBoltIcon({ className }: { className?: string }) {
+  return (
+    <svg data-part="fast" aria-hidden viewBox="0 0 12 12" fill="currentColor" className={className}>
+      <path d="m10.672,4.917c-.126-.256-.387-.417-.672-.417h-3.146l.474-3.654c.043-.336-.145-.661-.459-.79s-.676-.032-.881.238L1.404,6.295c-.174.227-.203.532-.076.788.126.256.387.417.672.417h3.146l-.474,3.654c-.043.336.145.661.459.79.093.038.189.057.285.057.229,0,.451-.104.596-.295l4.583-6c.174-.227.203-.532.076-.788Z" />
+    </svg>
+  )
+}
+
 type ModelOptionsOf = ClaudeModelOptions | CodexModelOptions | CursorModelOptions | PiModelOptions
 
 export interface HarnessMenuBodyProps {
@@ -371,6 +380,11 @@ export function ComposerHarnessMenu({
   const modelLabel = resolveModelLabel(providerConfig?.models ?? [], effectiveState.model)
   const providerLabel = selectedProvider === "claude" ? "Claude" : providerConfig?.label ?? selectedProvider
   const contextWarning = isContextNearlyFull(contextWindow)
+  // The menu's Effort row's label, said faintly after the model in the card.
+  const effortLabel = optionControls.reasoning?.options.find((option) => option.id === optionControls.reasoning?.selectedId)?.label
+  // Fast mode, as a bolt between the model and the effort: only with both
+  // shown, as iOS does, so a harness without efforts says nothing extra.
+  const showFast = showModel && Boolean(effortLabel) && Boolean(optionControls.fastMode?.enabled)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -378,9 +392,11 @@ export function ComposerHarnessMenu({
         <button
           type="button"
           disabled={disabled}
-          aria-label={`${providerLabel}, ${modelLabel}${contextWarning ? ", context nearly full" : ""}${providerSwitchPending ? ", switches on your next message" : ""}. Harness and model`}
+          aria-label={`${providerLabel}, ${modelLabel}${showFast ? " Fast" : ""}${showModel && effortLabel ? ` ${effortLabel}` : ""}${contextWarning ? ", context nearly full" : ""}${providerSwitchPending ? ", switches on your next message" : ""}. Harness and model`}
           className={cn(
-            "flex shrink-0 items-center justify-center gap-1.5 rounded-full text-sm transition-colors hover:bg-muted/50 disabled:opacity-70",
+            // Named, it may shrink in a narrow card: the effort goes first, then the model.
+            "flex", showModel ? "min-w-0" : "shrink-0",
+            "items-center justify-center gap-1.5 rounded-full text-sm transition-colors hover:bg-muted/50 disabled:opacity-70",
             "data-[state=open]:bg-muted/50",
             className,
           )}
@@ -391,7 +407,21 @@ export function ComposerHarnessMenu({
             contextPercent={contextWindow?.usedPercentage ?? null}
             staged={providerSwitchPending}
           />
-          {showModel ? <span className="whitespace-nowrap text-foreground">{modelLabel}</span> : null}
+          {showModel ? (
+            <span className="flex min-w-0 items-center gap-1 whitespace-nowrap">
+              <span className="min-w-0 truncate text-foreground">{modelLabel}</span>
+              {showFast ? (
+                // iOS's spacing as a share of the type (FastBoltLayout, tuned by
+                // Jake): on the ink, 0.58em after the name and 0.33em before the
+                // effort. At 14px that measures 8.25 and 5px on the ink, from the
+                // gap's 6 and 6.25.
+                <FastBoltIcon className="ml-[2px] -mr-[1.5px] h-3 w-3 shrink-0 text-muted-foreground/70" />
+              ) : null}
+              {effortLabel ? (
+                <span data-part="effort" className="min-w-0 shrink-[1000] truncate text-muted-foreground/70">{effortLabel}</span>
+              ) : null}
+            </span>
+          ) : null}
         </button>
       </PopoverTrigger>
       {providerConfig ? (

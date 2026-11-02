@@ -1,0 +1,3113 @@
+{
+ "cases": [
+  {
+   "name": "A finished turn folds its work and keeps its reply",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "s1",
+     "kind": "system_init",
+     "createdAt": 10,
+     "provider": "claude",
+     "model": "opus",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 1000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 2000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 3000,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "a2",
+     "kind": "assistant_text",
+     "createdAt": 4000,
+     "text": "Done."
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 5000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 5000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "a1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 5000,
+     "label": "Worked for 5s",
+     "roles": {
+      "a1": "folded",
+      "c1": "folded",
+      "a2": "reply",
+      "res1": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A turn with nothing to hide gets no fold",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 1000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 2000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 2000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "a1",
+     "settled": true,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 2000,
+     "label": "Worked for 2s",
+     "roles": {
+      "a1": "reply",
+      "res1": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "What survives the fold",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 1000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "edit_file",
+      "toolName": "Edit",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 1001,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "c2",
+     "kind": "tool_call",
+     "createdAt": 1100,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "display",
+      "toolName": "show_visualization",
+      "toolId": "tool-c2",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r2",
+     "kind": "tool_result",
+     "createdAt": 1101,
+     "toolId": "tool-c2",
+     "content": "ok"
+    },
+    {
+     "_id": "c3",
+     "kind": "tool_call",
+     "createdAt": 1200,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "todo_write",
+      "toolName": "TodoWrite",
+      "toolId": "tool-c3",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r3",
+     "kind": "tool_result",
+     "createdAt": 1201,
+     "toolId": "tool-c3",
+     "content": "ok"
+    },
+    {
+     "_id": "c4",
+     "kind": "tool_call",
+     "createdAt": 1300,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "ask_user_question",
+      "toolName": "AskUserQuestion",
+      "toolId": "tool-c4",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r4",
+     "kind": "tool_result",
+     "createdAt": 1300,
+     "toolId": "tool-c4",
+     "content": "ok"
+    },
+    {
+     "_id": "c5",
+     "kind": "tool_call",
+     "createdAt": 1400,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "subagent_task",
+      "toolName": "Agent",
+      "toolId": "tool-c5",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r5",
+     "kind": "tool_result",
+     "createdAt": 1401,
+     "toolId": "tool-c5",
+     "content": "ok"
+    },
+    {
+     "_id": "c6",
+     "kind": "tool_call",
+     "createdAt": 1500,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "read_file",
+      "toolName": "Read",
+      "toolId": "tool-c6",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r6",
+     "kind": "tool_result",
+     "createdAt": 1501,
+     "toolId": "tool-c6",
+     "content": "ok"
+    },
+    {
+     "_id": "c7",
+     "kind": "tool_call",
+     "createdAt": 1600,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "chat",
+      "toolName": "create_chat",
+      "toolId": "tool-c7",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r7",
+     "kind": "tool_result",
+     "createdAt": 1601,
+     "toolId": "tool-c7",
+     "content": "ok"
+    },
+    {
+     "_id": "c8",
+     "kind": "tool_call",
+     "createdAt": 1700,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "schedule",
+      "toolName": "set_schedule",
+      "toolId": "tool-c8",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r8",
+     "kind": "tool_result",
+     "createdAt": 1701,
+     "toolId": "tool-c8",
+     "content": "ok"
+    },
+    {
+     "_id": "c9",
+     "kind": "tool_call",
+     "createdAt": 1800,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "unknown_tool",
+      "toolName": "send_message",
+      "toolId": "tool-c9",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r9",
+     "kind": "tool_result",
+     "createdAt": 1801,
+     "toolId": "tool-c9",
+     "content": "ok"
+    },
+    {
+     "_id": "c10",
+     "kind": "tool_call",
+     "createdAt": 1900,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "request_secrets",
+      "toolName": "request_secrets",
+      "toolId": "tool-c10",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r10",
+     "kind": "tool_result",
+     "createdAt": 1900,
+     "toolId": "tool-c10",
+     "content": "ok"
+    },
+    {
+     "_id": "c11",
+     "kind": "tool_call",
+     "createdAt": 1950,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "display",
+      "toolName": "send_attachments",
+      "toolId": "tool-c11",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r11",
+     "kind": "tool_result",
+     "createdAt": 1951,
+     "toolId": "tool-c11",
+     "content": "ok"
+    },
+    {
+     "_id": "c12",
+     "kind": "tool_call",
+     "createdAt": 1960,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c12",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r12",
+     "kind": "tool_result",
+     "createdAt": 1961,
+     "toolId": "tool-c12",
+     "content": "ok"
+    },
+    {
+     "_id": "c13",
+     "kind": "tool_call",
+     "createdAt": 1970,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "grep",
+      "toolName": "Grep",
+      "toolId": "tool-c13",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r13",
+     "kind": "tool_result",
+     "createdAt": 1971,
+     "toolId": "tool-c13",
+     "content": "ok"
+    },
+    {
+     "_id": "cb",
+     "kind": "compact_boundary",
+     "createdAt": 2000
+    },
+    {
+     "_id": "cs",
+     "kind": "compact_summary",
+     "createdAt": 2001,
+     "summary": "earlier"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 3000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c14",
+     "kind": "tool_call",
+     "createdAt": 4000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "exit_plan_mode",
+      "toolName": "ExitPlanMode",
+      "toolId": "tool-c14",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r14",
+     "kind": "tool_result",
+     "createdAt": 4000,
+     "toolId": "tool-c14",
+     "content": "ok"
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 134000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 0,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "c1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 134000,
+     "label": "Worked for 2m 14s",
+     "roles": {
+      "c1": "folded",
+      "c2": "kept",
+      "c3": "folded",
+      "c4": "folded",
+      "c5": "folded",
+      "c6": "folded",
+      "c7": "kept",
+      "c8": "kept",
+      "c9": "kept",
+      "c10": "folded",
+      "c11": "kept",
+      "c12": "folded",
+      "c13": "folded",
+      "cb": "kept",
+      "cs": "kept",
+      "a1": "reply",
+      "c14": "kept",
+      "res1": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A plan with text after it folds, and the wait for its answer is not work",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 1000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "exit_plan_mode",
+      "toolName": "ExitPlanMode",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 61000,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 62000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 63000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 63000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "c1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 3000,
+     "label": "Worked for 3s",
+     "roles": {
+      "c1": "folded",
+      "a1": "reply",
+      "res1": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A failed turn keeps its error",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 1000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 1500,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 3000,
+     "subtype": "error",
+     "isError": true,
+     "durationMs": 3000,
+     "result": "boom"
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "c1",
+     "settled": true,
+     "folds": true,
+     "outcome": "failed",
+     "workedMs": 3000,
+     "label": "Failed after 3s",
+     "roles": {
+      "c1": "folded",
+      "res1": "kept"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A stopped turn reads Stopped after, timed to the stop",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 1000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 2000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "int1",
+     "kind": "interrupted",
+     "createdAt": 61000
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "a1",
+     "settled": true,
+     "folds": true,
+     "outcome": "stopped",
+     "workedMs": 61000,
+     "label": "Stopped after 1m 1s",
+     "roles": {
+      "a1": "reply",
+      "c1": "folded",
+      "int1": "folded"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A cancelled result reads Stopped",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 500,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 1000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 2000,
+     "subtype": "cancelled",
+     "isError": false,
+     "durationMs": 2000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "a1",
+     "settled": true,
+     "folds": true,
+     "outcome": "stopped",
+     "workedMs": 2000,
+     "label": "Stopped after 2s",
+     "roles": {
+      "a1": "reply",
+      "c1": "folded",
+      "res1": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A stopped turn that said nothing is not folded: nothing would be left",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 1000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 1500,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "c2",
+     "kind": "tool_call",
+     "createdAt": 2000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "edit_file",
+      "toolName": "Edit",
+      "toolId": "tool-c2",
+      "input": {}
+     }
+    },
+    {
+     "_id": "int1",
+     "kind": "interrupted",
+     "createdAt": 9000
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "c1",
+     "settled": true,
+     "folds": false,
+     "outcome": "stopped",
+     "workedMs": 9000,
+     "label": "Stopped after 9s",
+     "roles": {
+      "c1": "folded",
+      "c2": "folded",
+      "int1": "folded"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A steered turn reads Worked for, and the steer opens the next",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 1000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 2000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "int1",
+     "kind": "interrupted",
+     "createdAt": 65000,
+     "hidden": true
+    },
+    {
+     "_id": "p2",
+     "kind": "user_prompt",
+     "createdAt": 65001,
+     "content": "do it",
+     "steered": true
+    },
+    {
+     "_id": "a2",
+     "kind": "assistant_text",
+     "createdAt": 70000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res2",
+     "kind": "result",
+     "createdAt": 71000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 4000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "a1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 65000,
+     "label": "Worked for 1m 5s",
+     "roles": {
+      "a1": "reply",
+      "c1": "folded",
+      "int1": "folded"
+     }
+    },
+    {
+     "id": "p2",
+     "header": "a2",
+     "settled": true,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 4000,
+     "label": "Worked for 4s",
+     "roles": {
+      "a2": "reply",
+      "res2": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A delegator turn still going is not folded",
+   "atRest": false,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 1000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "cc1",
+     "kind": "tool_call",
+     "createdAt": 2000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "chat",
+      "toolName": "create_chat",
+      "toolId": "tool-cc1",
+      "input": {
+       "payload": {
+        "title": "Docs audit",
+        "message": "Audit the docs."
+       }
+      }
+     }
+    },
+    {
+     "_id": "rc1",
+     "kind": "tool_result",
+     "createdAt": 2100,
+     "toolId": "tool-cc1",
+     "content": "{\"chatId\":\"chatA\",\"title\":\"Docs audit\"}"
+    },
+    {
+     "_id": "cc2",
+     "kind": "tool_call",
+     "createdAt": 2200,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "chat",
+      "toolName": "create_chat",
+      "toolId": "tool-cc2",
+      "input": {
+       "payload": {
+        "message": "Build the funnel report."
+       }
+      }
+     }
+    },
+    {
+     "_id": "rc2",
+     "kind": "tool_result",
+     "createdAt": 2300,
+     "toolId": "tool-cc2",
+     "content": "{\"chatId\":\"chatB\"}"
+    },
+    {
+     "_id": "a2",
+     "kind": "assistant_text",
+     "createdAt": 3000,
+     "text": "Started two chats."
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 4000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 2000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "a1",
+     "settled": false,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 2000,
+     "label": "Worked for 2s",
+     "roles": {
+      "a1": "folded",
+      "cc1": "folded",
+      "cc2": "folded",
+      "a2": "reply",
+      "res1": "end"
+     },
+     "chatCards": [
+      {
+       "chatId": "chatA",
+       "anchorEntryId": "cc1",
+       "last": "started",
+       "lastEntryId": "cc1",
+       "preview": "Audit the docs.",
+       "title": "Docs audit"
+      },
+      {
+       "chatId": "chatB",
+       "anchorEntryId": "cc2",
+       "last": "started",
+       "lastEntryId": "cc2",
+       "preview": "Build the funnel report."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "A delegator's turns fold one by one, each report above its own",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 1000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "cc1",
+     "kind": "tool_call",
+     "createdAt": 2000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "chat",
+      "toolName": "create_chat",
+      "toolId": "tool-cc1",
+      "input": {
+       "payload": {
+        "title": "Docs audit",
+        "message": "Audit the docs."
+       }
+      }
+     }
+    },
+    {
+     "_id": "rc1",
+     "kind": "tool_result",
+     "createdAt": 2100,
+     "toolId": "tool-cc1",
+     "content": "{\"chatId\":\"chatA\",\"title\":\"Docs audit\"}"
+    },
+    {
+     "_id": "cc2",
+     "kind": "tool_call",
+     "createdAt": 2200,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "chat",
+      "toolName": "create_chat",
+      "toolId": "tool-cc2",
+      "input": {
+       "payload": {
+        "message": "Build the funnel report."
+       }
+      }
+     }
+    },
+    {
+     "_id": "rc2",
+     "kind": "tool_result",
+     "createdAt": 2300,
+     "toolId": "tool-cc2",
+     "content": "{\"chatId\":\"chatB\"}"
+    },
+    {
+     "_id": "a2",
+     "kind": "assistant_text",
+     "createdAt": 3000,
+     "text": "Started two chats."
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 4000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 2000,
+     "result": ""
+    },
+    {
+     "_id": "rp1",
+     "kind": "user_prompt",
+     "createdAt": 60000,
+     "content": "<system-message>Sub-chat completed: chatA (chat id chatA)</system-message>\n\nThe docs audit is done.",
+     "source": {
+      "kind": "report",
+      "chatIds": [
+       "chatA"
+      ]
+     }
+    },
+    {
+     "_id": "a3",
+     "kind": "assistant_text",
+     "createdAt": 61000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 62000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 62500,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "cc3",
+     "kind": "tool_call",
+     "createdAt": 63000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "chat",
+      "toolName": "send_message",
+      "toolId": "tool-cc3",
+      "input": {
+       "payload": {
+        "chatId": "chatA",
+        "message": "One more page, please."
+       }
+      }
+     }
+    },
+    {
+     "_id": "rc3",
+     "kind": "tool_result",
+     "createdAt": 63100,
+     "toolId": "tool-cc3",
+     "content": "{\"started\":true}"
+    },
+    {
+     "_id": "res2",
+     "kind": "result",
+     "createdAt": 64000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 3000,
+     "result": ""
+    },
+    {
+     "_id": "rp2",
+     "kind": "user_prompt",
+     "createdAt": 120000,
+     "content": "<system-message>Sub-chat completed: chatC (chat id chatC)</system-message>\n\nSignups are down 15%.\n\n---\n\n<system-message>Sub-chat completed: chatA (chat id chatA)</system-message>\n\nDone with the extra page.",
+     "source": {
+      "kind": "report",
+      "chatIds": [
+       "chatC",
+       "chatA"
+      ]
+     }
+    },
+    {
+     "_id": "a4",
+     "kind": "assistant_text",
+     "createdAt": 121000,
+     "text": "All done."
+    },
+    {
+     "_id": "res3",
+     "kind": "result",
+     "createdAt": 122000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 2000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "a1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 2000,
+     "label": "Worked for 2s",
+     "roles": {
+      "a1": "folded",
+      "cc1": "folded",
+      "cc2": "folded",
+      "a2": "reply",
+      "res1": "end"
+     },
+     "chatCards": [
+      {
+       "chatId": "chatA",
+       "anchorEntryId": "cc1",
+       "last": "started",
+       "lastEntryId": "cc1",
+       "preview": "Audit the docs.",
+       "title": "Docs audit"
+      },
+      {
+       "chatId": "chatB",
+       "anchorEntryId": "cc2",
+       "last": "started",
+       "lastEntryId": "cc2",
+       "preview": "Build the funnel report."
+      }
+     ]
+    },
+    {
+     "id": "rp1",
+     "header": "a3",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 3000,
+     "label": "Worked for 3s",
+     "roles": {
+      "a3": "reply",
+      "c1": "folded",
+      "cc3": "folded",
+      "res2": "end"
+     },
+     "chatCards": [
+      {
+       "chatId": "chatA",
+       "anchorEntryId": "cc3",
+       "last": "sent",
+       "lastEntryId": "cc3",
+       "preview": "One more page, please."
+      }
+     ]
+    },
+    {
+     "id": "rp2",
+     "header": "a4",
+     "settled": true,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 2000,
+     "label": "Worked for 2s",
+     "roles": {
+      "a4": "reply",
+      "res3": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A send, then the report it brings back, are two turns",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "cc1",
+     "kind": "tool_call",
+     "createdAt": 1000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "chat",
+      "toolName": "send_message",
+      "toolId": "tool-cc1",
+      "input": {
+       "payload": {
+        "chatId": "chatA",
+        "message": "Correction on MMP."
+       }
+      }
+     }
+    },
+    {
+     "_id": "rc1",
+     "kind": "tool_result",
+     "createdAt": 1100,
+     "toolId": "tool-cc1",
+     "content": "{\"started\":true}"
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 2000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 2000,
+     "result": ""
+    },
+    {
+     "_id": "rp1",
+     "kind": "user_prompt",
+     "createdAt": 30000,
+     "content": "<system-message>Sub-chat completed: chatA (chat id chatA)</system-message>\n\nFixed the MMP page.\n\n---\n\n<system-message>Sub-chat completed: chatB (chat id chatB)</system-message>\n\nToday's funnel report.",
+     "source": {
+      "kind": "report",
+      "chatIds": [
+       "chatA",
+       "chatB"
+      ]
+     }
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 31000,
+     "text": "Here's the funnel."
+    },
+    {
+     "_id": "res2",
+     "kind": "result",
+     "createdAt": 32000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 1000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "cc1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 2000,
+     "label": "Worked for 2s",
+     "roles": {
+      "cc1": "folded",
+      "res1": "end"
+     },
+     "chatCards": [
+      {
+       "chatId": "chatA",
+       "anchorEntryId": "cc1",
+       "last": "sent",
+       "lastEntryId": "cc1",
+       "preview": "Correction on MMP."
+      }
+     ]
+    },
+    {
+     "id": "rp1",
+     "header": "a1",
+     "settled": true,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 1000,
+     "label": "Worked for 1s",
+     "roles": {
+      "a1": "reply",
+      "res2": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A running turn is not settled; the one before it is",
+   "atRest": false,
+   "entries": [
+    {
+     "_id": "p0",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "a0",
+     "kind": "assistant_text",
+     "createdAt": 500,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c0",
+     "kind": "tool_call",
+     "createdAt": 600,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c0",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r0",
+     "kind": "tool_result",
+     "createdAt": 700,
+     "toolId": "tool-c0",
+     "content": "ok"
+    },
+    {
+     "_id": "a00",
+     "kind": "assistant_text",
+     "createdAt": 800,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res0",
+     "kind": "result",
+     "createdAt": 1000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 1000,
+     "result": ""
+    },
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 5000,
+     "content": "do it"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 6000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 7000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    }
+   ],
+   "folds": [
+    {
+     "id": "p0",
+     "header": "a0",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 1000,
+     "label": "Worked for 1s",
+     "roles": {
+      "a0": "folded",
+      "c0": "folded",
+      "a00": "reply",
+      "res0": "end"
+     }
+    },
+    {
+     "id": "p1",
+     "header": "a1",
+     "settled": false,
+     "folds": false,
+     "outcome": "stopped",
+     "workedMs": null,
+     "label": "Stopped \u00b7 Show work",
+     "roles": {
+      "a1": "reply",
+      "c1": "folded"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A question still waiting on the user holds the turn open",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 1000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 2000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "ask_user_question",
+      "toolName": "AskUserQuestion",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "a1",
+     "settled": false,
+     "folds": false,
+     "outcome": "stopped",
+     "workedMs": null,
+     "label": "Stopped \u00b7 Show work",
+     "roles": {
+      "a1": "reply",
+      "c1": "folded"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A window that cuts a turn folds what it holds, timed by the provider",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "a0",
+     "kind": "assistant_text",
+     "createdAt": 1000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c0",
+     "kind": "tool_call",
+     "createdAt": 2000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c0",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r0",
+     "kind": "tool_result",
+     "createdAt": 2500,
+     "toolId": "tool-c0",
+     "content": "ok"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 3000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res0",
+     "kind": "result",
+     "createdAt": 4000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 9000,
+     "result": ""
+    },
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 10000,
+     "content": "do it"
+    },
+    {
+     "_id": "a2",
+     "kind": "assistant_text",
+     "createdAt": 11000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 12000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 2000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "partial:a0",
+     "header": "a0",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 9000,
+     "label": "Worked for 9s",
+     "roles": {
+      "a0": "folded",
+      "c0": "folded",
+      "a1": "reply",
+      "res0": "end"
+     }
+    },
+    {
+     "id": "p1",
+     "header": "a2",
+     "settled": true,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 2000,
+     "label": "Worked for 2s",
+     "roles": {
+      "a2": "reply",
+      "res1": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A window that cuts a turn with no reported duration says Show work",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "a0",
+     "kind": "assistant_text",
+     "createdAt": 1000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c0",
+     "kind": "tool_call",
+     "createdAt": 2000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c0",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r0",
+     "kind": "tool_result",
+     "createdAt": 2500,
+     "toolId": "tool-c0",
+     "content": "ok"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 3000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res0",
+     "kind": "result",
+     "createdAt": 4000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 0,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "partial:a0",
+     "header": "a0",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": null,
+     "label": "Show work",
+     "roles": {
+      "a0": "folded",
+      "c0": "folded",
+      "a1": "reply",
+      "res0": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A prompt nobody sees after a turn ended starts its own; a schedule opens one too",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 100,
+     "text": "\u2026"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 200,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 300,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "a2",
+     "kind": "assistant_text",
+     "createdAt": 400,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 1000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 1000,
+     "result": ""
+    },
+    {
+     "_id": "ph",
+     "kind": "user_prompt",
+     "createdAt": 5000,
+     "content": "do it",
+     "hidden": true
+    },
+    {
+     "_id": "a3",
+     "kind": "assistant_text",
+     "createdAt": 5100,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res2",
+     "kind": "result",
+     "createdAt": 5500,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 500,
+     "result": ""
+    },
+    {
+     "_id": "ps",
+     "kind": "user_prompt",
+     "createdAt": 9000,
+     "content": "do it",
+     "source": {
+      "kind": "schedule",
+      "scheduleId": "s"
+     }
+    },
+    {
+     "_id": "a4",
+     "kind": "assistant_text",
+     "createdAt": 9100,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res3",
+     "kind": "result",
+     "createdAt": 9500,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 500,
+     "result": ""
+    },
+    {
+     "_id": "pa",
+     "kind": "user_prompt",
+     "createdAt": 20000,
+     "content": "do it",
+     "source": {
+      "kind": "agent",
+      "chatId": "c"
+     }
+    },
+    {
+     "_id": "c2",
+     "kind": "tool_call",
+     "createdAt": 20100,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c2",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r2",
+     "kind": "tool_result",
+     "createdAt": 20200,
+     "toolId": "tool-c2",
+     "content": "ok"
+    },
+    {
+     "_id": "a5",
+     "kind": "assistant_text",
+     "createdAt": 20300,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res4",
+     "kind": "result",
+     "createdAt": 21000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 1000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "a1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 1000,
+     "label": "Worked for 1s",
+     "roles": {
+      "a1": "folded",
+      "c1": "folded",
+      "a2": "reply",
+      "res1": "end"
+     }
+    },
+    {
+     "id": "ph",
+     "header": "a3",
+     "settled": true,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 500,
+     "label": "Worked for <1s",
+     "roles": {
+      "a3": "reply",
+      "res2": "end"
+     }
+    },
+    {
+     "id": "ps",
+     "header": "a4",
+     "settled": true,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 500,
+     "label": "Worked for <1s",
+     "roles": {
+      "a4": "reply",
+      "res3": "end"
+     }
+    },
+    {
+     "id": "pa",
+     "header": "c2",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 1000,
+     "label": "Worked for 1s",
+     "roles": {
+      "c2": "folded",
+      "a5": "reply",
+      "res4": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A subagent's own rows are not the turn's",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 1000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "subagent_task",
+      "toolName": "Agent",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "x1",
+     "kind": "assistant_text",
+     "createdAt": 1100,
+     "text": "\u2026",
+     "parentToolUseId": "tool-c1"
+    },
+    {
+     "_id": "x2",
+     "kind": "tool_call",
+     "createdAt": 1200,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-x2",
+      "input": {}
+     },
+     "parentToolUseId": "tool-c1"
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 5000,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 6000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 7000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 7000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "c1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 7000,
+     "label": "Worked for 7s",
+     "roles": {
+      "c1": "folded",
+      "a1": "reply",
+      "res1": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "Hours read with minutes and seconds",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 1000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 2000,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 3000,
+     "text": "\u2026"
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 4000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 23012000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "c1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 23012000,
+     "label": "Worked for 6h 23m 32s",
+     "roles": {
+      "c1": "folded",
+      "a1": "reply",
+      "res1": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "Supervibes: a turn left on an unanswered form shows whole, and the next turn runs from its own prompt",
+   "atRest": false,
+   "entries": [
+    {
+     "_id": "012aa0ec-d4b9-430f-8c1f-9289817523c6",
+     "createdAt": 1793113325347,
+     "kind": "user_prompt",
+     "content": "ask me for made up oauth credentials (this is a test of your",
+     "attachments": []
+    },
+    {
+     "_id": "23c207d6-a079-4262-aecc-18705555e6cb",
+     "createdAt": 1793113328131,
+     "kind": "account_info",
+     "accountInfo": {}
+    },
+    {
+     "_id": "d9df838a-0d14-4fa3-a3d2-035dc1d4d3bd",
+     "createdAt": 1793113328532,
+     "kind": "system_init",
+     "messageId": "34154225-4b4f-4e66-959c-9b6cf69f6ebc",
+     "provider": "claude",
+     "model": "claude-opus-5-5[1m]",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "5358b62f-e9b3-4783-8108-d49898bef95f",
+     "createdAt": 1793113334792,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "48855234-1643-4a64-81e2-7825494584a1",
+     "createdAt": 1793113334798,
+     "kind": "tool_call",
+     "tool": {
+      "kind": "tool",
+      "toolKind": "request_secrets",
+      "toolName": "request_secrets",
+      "toolId": "kanna-0b086e36-f57e-4bab-b506-e6639853e05d",
+      "input": {}
+     }
+    },
+    {
+     "_id": "1e4a22b6-5049-4988-9c1e-ae7fd5015a56",
+     "createdAt": 1793113419877,
+     "kind": "tool_result",
+     "toolId": "kanna-0b086e36-f57e-4bab-b506-e6639853e05d",
+     "content": "ok"
+    },
+    {
+     "_id": "9a30f33c-d019-4fed-860e-5b5afe541c09",
+     "createdAt": 1793113422454,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "78a416e3-b839-4e5e-8b02-f47dd03572d8",
+     "createdAt": 1793113422456,
+     "kind": "assistant_text",
+     "messageId": "e47a00de-6719-42b0-9c9b-41de4e683c75",
+     "text": "The form was cancelled and nothing was saved. It asked for t"
+    },
+    {
+     "_id": "cc81bb3b-94ea-490b-90c1-1d531b400e70",
+     "createdAt": 1793113423108,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "bada011d-c834-4e86-bd35-df5878583a37",
+     "createdAt": 1793113423109,
+     "kind": "result",
+     "messageId": "c9188c08-5c7b-46ba-969b-280a876f1520",
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 94002,
+     "result": "The form was cancelled and nothing was saved. It asked for three keys:\n\n- `TEST_OAUTH_CLIENT_ID`, shown as you type.\n- `TEST_OAUTH_CLIENT_SECRET`, masked.\n- `TEST_OAUTH_REFRESH_TOKEN`, masked and optional.\n\nAll three came back as skipped. Did you cancel the form on purpose? If not, say so and I'll send it again.",
+     "costUsd": 0.9107654000000001
+    },
+    {
+     "_id": "289bd660-b582-4fb6-9c31-a1933678997a",
+     "createdAt": 1793113432852,
+     "kind": "user_prompt",
+     "content": "try again make it look more realistic",
+     "attachments": []
+    },
+    {
+     "_id": "00290675-c356-420c-a34e-2ebe22746722",
+     "createdAt": 1793113432895,
+     "kind": "system_init",
+     "messageId": "d32ca0d9-e2e9-491c-8a05-d12b98d8b324",
+     "provider": "claude",
+     "model": "claude-opus-5-5[1m]",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "cec17c31-4ac4-493b-9cca-11deeee365d1",
+     "createdAt": 1793113437241,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "021310a1-d4e4-4e2b-a763-44e5b51c7f25",
+     "createdAt": 1793113437245,
+     "kind": "tool_call",
+     "tool": {
+      "kind": "tool",
+      "toolKind": "request_secrets",
+      "toolName": "request_secrets",
+      "toolId": "kanna-e2bf2f87-8109-487a-8d84-e9bcc62c5a57",
+      "input": {}
+     }
+    },
+    {
+     "_id": "29825b64-a3a9-4917-b2a5-53ddf7ccc167",
+     "createdAt": 1793113982636,
+     "kind": "tool_result",
+     "toolId": "kanna-e2bf2f87-8109-487a-8d84-e9bcc62c5a57",
+     "content": "ok"
+    },
+    {
+     "_id": "a06c1049-38eb-471b-9e21-543759093486",
+     "createdAt": 1793113986462,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "ac8e6073-2364-4017-a7bf-4d74f2b1cf32",
+     "createdAt": 1793113986462,
+     "kind": "assistant_text",
+     "messageId": "4f0d916c-1336-4e6e-864f-aff389d41462",
+     "text": "That one was cancelled as well, so nothing was saved again. "
+    },
+    {
+     "_id": "4d35b012-738d-45d8-a215-619d16cdfff2",
+     "createdAt": 1793113986491,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "26ee8560-5751-4d6b-bced-7baa657dc950",
+     "createdAt": 1793113986491,
+     "kind": "result",
+     "messageId": "0b00843d-23b5-465a-9968-19ecc75db558",
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 553616,
+     "result": "That one was cancelled as well, so nothing was saved again. This time the form asked for a Google OAuth client, with fields labelled the way Google Cloud console names them:\n\n- `GOOGLE_CLIENT_ID`: shown as you type, with a hint that it ends in `.apps.googleusercontent.com`.\n- `GOOGLE_CLIENT_SECRET`: masked, with a hint that it starts with `GOCSPX-`.\n- `GOOGLE_REDIRECT_URI`: shown as you type and optional, with an example callback URL.\n\nTwo cancels in a row may mean the form isn't reaching you. Did you see it and dismiss it, or did it never appear?",
+     "costUsd": 0.9879466000000001
+    },
+    {
+     "_id": "d9c8e3f8-4d50-409b-b170-5d8e0b4bc311",
+     "createdAt": 1793114006495,
+     "kind": "user_prompt",
+     "content": "ill send you a realistic message for a screenshow and you re",
+     "attachments": []
+    },
+    {
+     "_id": "76773536-90d7-4b33-93ea-66b40ea288db",
+     "createdAt": 1793114006540,
+     "kind": "system_init",
+     "messageId": "472ba818-51a3-4259-8f9d-9670edf3dfab",
+     "provider": "claude",
+     "model": "claude-opus-5-5[1m]",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "2979de87-a17c-4ca4-af31-77ebbd182183",
+     "createdAt": 1793114008642,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "32ce6296-1f84-4a66-a9de-7223e7cccc36",
+     "createdAt": 1793114008642,
+     "kind": "assistant_text",
+     "messageId": "088a9618-92c6-4b96-ba64-abdb7a34e5ea",
+     "text": "Sounds good. Send the message and I'll put up the credential"
+    },
+    {
+     "_id": "187f822a-aa3c-4ceb-b541-7345c6c22972",
+     "createdAt": 1793114008671,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "6cf5e5d8-bc34-457a-bf97-3e95baa90c36",
+     "createdAt": 1793114008671,
+     "kind": "result",
+     "messageId": "720f7743-396e-4dd2-b625-22766226760f",
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 2156,
+     "result": "Sounds good. Send the message and I'll put up the credentials form the same way.",
+     "costUsd": 1.0205878000000002
+    },
+    {
+     "_id": "902f6b2d-7aeb-4768-ab3e-4a9c89462060",
+     "createdAt": 1793114015263,
+     "kind": "user_prompt",
+     "content": "setup google oauth for me ",
+     "attachments": []
+    },
+    {
+     "_id": "d856a98b-bb2e-4df3-b5fb-55421b797859",
+     "createdAt": 1793114015293,
+     "kind": "system_init",
+     "messageId": "da082dd2-b7e7-4a46-8d3b-5989861d3479",
+     "provider": "claude",
+     "model": "claude-opus-5-5[1m]",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "31c7c5f9-1b94-41fc-a462-e692b13edfa3",
+     "createdAt": 1793114020159,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "6e961f70-8d88-46d8-b2d9-9c5f584670d3",
+     "createdAt": 1793114020170,
+     "kind": "tool_call",
+     "tool": {
+      "kind": "tool",
+      "toolKind": "request_secrets",
+      "toolName": "request_secrets",
+      "toolId": "kanna-0894481d-51e5-43b7-b941-7b7c3041e1b1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "b576b9a0-6fef-4eb1-9969-6a3a70565281",
+     "createdAt": 1793452053727,
+     "kind": "user_prompt",
+     "content": "make a demo chart",
+     "attachments": []
+    },
+    {
+     "_id": "b478466a-e414-4575-9fba-df757f9df276",
+     "createdAt": 1793452056007,
+     "kind": "account_info",
+     "accountInfo": {}
+    },
+    {
+     "_id": "3b3cc661-2d5c-4ffc-877c-7cb956d6a3da",
+     "createdAt": 1793452056058,
+     "kind": "system_init",
+     "messageId": "a1452acf-b014-4962-91d4-db1f7f869e62",
+     "provider": "claude",
+     "model": "claude-opus-5-5[1m]",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "08661f61-faba-4385-9885-a8b5b5bfef3d",
+     "createdAt": 1793452064758,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    }
+   ],
+   "folds": [
+    {
+     "id": "012aa0ec-d4b9-430f-8c1f-9289817523c6",
+     "header": "48855234-1643-4a64-81e2-7825494584a1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 8923,
+     "label": "Worked for 8s",
+     "roles": {
+      "48855234-1643-4a64-81e2-7825494584a1": "folded",
+      "9a30f33c-d019-4fed-860e-5b5afe541c09": "kept",
+      "78a416e3-b839-4e5e-8b02-f47dd03572d8": "reply",
+      "cc81bb3b-94ea-490b-90c1-1d531b400e70": "kept",
+      "bada011d-c834-4e86-bd35-df5878583a37": "end"
+     }
+    },
+    {
+     "id": "289bd660-b582-4fb6-9c31-a1933678997a",
+     "header": "021310a1-d4e4-4e2b-a763-44e5b51c7f25",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 8225,
+     "label": "Worked for 8s",
+     "roles": {
+      "021310a1-d4e4-4e2b-a763-44e5b51c7f25": "folded",
+      "a06c1049-38eb-471b-9e21-543759093486": "kept",
+      "ac8e6073-2364-4017-a7bf-4d74f2b1cf32": "reply",
+      "4d35b012-738d-45d8-a215-619d16cdfff2": "kept",
+      "26ee8560-5751-4d6b-bced-7baa657dc950": "end"
+     }
+    },
+    {
+     "id": "d9c8e3f8-4d50-409b-b170-5d8e0b4bc311",
+     "header": "32ce6296-1f84-4a66-a9de-7223e7cccc36",
+     "settled": true,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 2156,
+     "label": "Worked for 2s",
+     "roles": {
+      "32ce6296-1f84-4a66-a9de-7223e7cccc36": "reply",
+      "187f822a-aa3c-4ceb-b541-7345c6c22972": "kept",
+      "6cf5e5d8-bc34-457a-bf97-3e95baa90c36": "end"
+     }
+    },
+    {
+     "id": "902f6b2d-7aeb-4768-ab3e-4a9c89462060",
+     "header": "6e961f70-8d88-46d8-b2d9-9c5f584670d3",
+     "settled": true,
+     "folds": false,
+     "outcome": "stopped",
+     "workedMs": null,
+     "label": "Stopped \u00b7 Show work",
+     "roles": {
+      "6e961f70-8d88-46d8-b2d9-9c5f584670d3": "folded"
+     }
+    },
+    {
+     "id": "b576b9a0-6fef-4eb1-9969-6a3a70565281",
+     "header": null,
+     "settled": false,
+     "folds": false,
+     "outcome": "stopped",
+     "workedMs": null,
+     "label": "Stopped \u00b7 Show work",
+     "roles": {}
+    }
+   ],
+   "workingSince": 1793452053727
+  },
+  {
+   "name": "Supervibes: the chart turn once it ends",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "012aa0ec-d4b9-430f-8c1f-9289817523c6",
+     "createdAt": 1793113325347,
+     "kind": "user_prompt",
+     "content": "ask me for made up oauth credentials (this is a test of your",
+     "attachments": []
+    },
+    {
+     "_id": "23c207d6-a079-4262-aecc-18705555e6cb",
+     "createdAt": 1793113328131,
+     "kind": "account_info",
+     "accountInfo": {}
+    },
+    {
+     "_id": "d9df838a-0d14-4fa3-a3d2-035dc1d4d3bd",
+     "createdAt": 1793113328532,
+     "kind": "system_init",
+     "messageId": "34154225-4b4f-4e66-959c-9b6cf69f6ebc",
+     "provider": "claude",
+     "model": "claude-opus-5-5[1m]",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "5358b62f-e9b3-4783-8108-d49898bef95f",
+     "createdAt": 1793113334792,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "48855234-1643-4a64-81e2-7825494584a1",
+     "createdAt": 1793113334798,
+     "kind": "tool_call",
+     "tool": {
+      "kind": "tool",
+      "toolKind": "request_secrets",
+      "toolName": "request_secrets",
+      "toolId": "kanna-0b086e36-f57e-4bab-b506-e6639853e05d",
+      "input": {}
+     }
+    },
+    {
+     "_id": "1e4a22b6-5049-4988-9c1e-ae7fd5015a56",
+     "createdAt": 1793113419877,
+     "kind": "tool_result",
+     "toolId": "kanna-0b086e36-f57e-4bab-b506-e6639853e05d",
+     "content": "ok"
+    },
+    {
+     "_id": "9a30f33c-d019-4fed-860e-5b5afe541c09",
+     "createdAt": 1793113422454,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "78a416e3-b839-4e5e-8b02-f47dd03572d8",
+     "createdAt": 1793113422456,
+     "kind": "assistant_text",
+     "messageId": "e47a00de-6719-42b0-9c9b-41de4e683c75",
+     "text": "The form was cancelled and nothing was saved. It asked for t"
+    },
+    {
+     "_id": "cc81bb3b-94ea-490b-90c1-1d531b400e70",
+     "createdAt": 1793113423108,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "bada011d-c834-4e86-bd35-df5878583a37",
+     "createdAt": 1793113423109,
+     "kind": "result",
+     "messageId": "c9188c08-5c7b-46ba-969b-280a876f1520",
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 94002,
+     "result": "The form was cancelled and nothing was saved. It asked for three keys:\n\n- `TEST_OAUTH_CLIENT_ID`, shown as you type.\n- `TEST_OAUTH_CLIENT_SECRET`, masked.\n- `TEST_OAUTH_REFRESH_TOKEN`, masked and optional.\n\nAll three came back as skipped. Did you cancel the form on purpose? If not, say so and I'll send it again.",
+     "costUsd": 0.9107654000000001
+    },
+    {
+     "_id": "289bd660-b582-4fb6-9c31-a1933678997a",
+     "createdAt": 1793113432852,
+     "kind": "user_prompt",
+     "content": "try again make it look more realistic",
+     "attachments": []
+    },
+    {
+     "_id": "00290675-c356-420c-a34e-2ebe22746722",
+     "createdAt": 1793113432895,
+     "kind": "system_init",
+     "messageId": "d32ca0d9-e2e9-491c-8a05-d12b98d8b324",
+     "provider": "claude",
+     "model": "claude-opus-5-5[1m]",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "cec17c31-4ac4-493b-9cca-11deeee365d1",
+     "createdAt": 1793113437241,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "021310a1-d4e4-4e2b-a763-44e5b51c7f25",
+     "createdAt": 1793113437245,
+     "kind": "tool_call",
+     "tool": {
+      "kind": "tool",
+      "toolKind": "request_secrets",
+      "toolName": "request_secrets",
+      "toolId": "kanna-e2bf2f87-8109-487a-8d84-e9bcc62c5a57",
+      "input": {}
+     }
+    },
+    {
+     "_id": "29825b64-a3a9-4917-b2a5-53ddf7ccc167",
+     "createdAt": 1793113982636,
+     "kind": "tool_result",
+     "toolId": "kanna-e2bf2f87-8109-487a-8d84-e9bcc62c5a57",
+     "content": "ok"
+    },
+    {
+     "_id": "a06c1049-38eb-471b-9e21-543759093486",
+     "createdAt": 1793113986462,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "ac8e6073-2364-4017-a7bf-4d74f2b1cf32",
+     "createdAt": 1793113986462,
+     "kind": "assistant_text",
+     "messageId": "4f0d916c-1336-4e6e-864f-aff389d41462",
+     "text": "That one was cancelled as well, so nothing was saved again. "
+    },
+    {
+     "_id": "4d35b012-738d-45d8-a215-619d16cdfff2",
+     "createdAt": 1793113986491,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "26ee8560-5751-4d6b-bced-7baa657dc950",
+     "createdAt": 1793113986491,
+     "kind": "result",
+     "messageId": "0b00843d-23b5-465a-9968-19ecc75db558",
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 553616,
+     "result": "That one was cancelled as well, so nothing was saved again. This time the form asked for a Google OAuth client, with fields labelled the way Google Cloud console names them:\n\n- `GOOGLE_CLIENT_ID`: shown as you type, with a hint that it ends in `.apps.googleusercontent.com`.\n- `GOOGLE_CLIENT_SECRET`: masked, with a hint that it starts with `GOCSPX-`.\n- `GOOGLE_REDIRECT_URI`: shown as you type and optional, with an example callback URL.\n\nTwo cancels in a row may mean the form isn't reaching you. Did you see it and dismiss it, or did it never appear?",
+     "costUsd": 0.9879466000000001
+    },
+    {
+     "_id": "d9c8e3f8-4d50-409b-b170-5d8e0b4bc311",
+     "createdAt": 1793114006495,
+     "kind": "user_prompt",
+     "content": "ill send you a realistic message for a screenshow and you re",
+     "attachments": []
+    },
+    {
+     "_id": "76773536-90d7-4b33-93ea-66b40ea288db",
+     "createdAt": 1793114006540,
+     "kind": "system_init",
+     "messageId": "472ba818-51a3-4259-8f9d-9670edf3dfab",
+     "provider": "claude",
+     "model": "claude-opus-5-5[1m]",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "2979de87-a17c-4ca4-af31-77ebbd182183",
+     "createdAt": 1793114008642,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "32ce6296-1f84-4a66-a9de-7223e7cccc36",
+     "createdAt": 1793114008642,
+     "kind": "assistant_text",
+     "messageId": "088a9618-92c6-4b96-ba64-abdb7a34e5ea",
+     "text": "Sounds good. Send the message and I'll put up the credential"
+    },
+    {
+     "_id": "187f822a-aa3c-4ceb-b541-7345c6c22972",
+     "createdAt": 1793114008671,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "6cf5e5d8-bc34-457a-bf97-3e95baa90c36",
+     "createdAt": 1793114008671,
+     "kind": "result",
+     "messageId": "720f7743-396e-4dd2-b625-22766226760f",
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 2156,
+     "result": "Sounds good. Send the message and I'll put up the credentials form the same way.",
+     "costUsd": 1.0205878000000002
+    },
+    {
+     "_id": "902f6b2d-7aeb-4768-ab3e-4a9c89462060",
+     "createdAt": 1793114015263,
+     "kind": "user_prompt",
+     "content": "setup google oauth for me ",
+     "attachments": []
+    },
+    {
+     "_id": "d856a98b-bb2e-4df3-b5fb-55421b797859",
+     "createdAt": 1793114015293,
+     "kind": "system_init",
+     "messageId": "da082dd2-b7e7-4a46-8d3b-5989861d3479",
+     "provider": "claude",
+     "model": "claude-opus-5-5[1m]",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "31c7c5f9-1b94-41fc-a462-e692b13edfa3",
+     "createdAt": 1793114020159,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "6e961f70-8d88-46d8-b2d9-9c5f584670d3",
+     "createdAt": 1793114020170,
+     "kind": "tool_call",
+     "tool": {
+      "kind": "tool",
+      "toolKind": "request_secrets",
+      "toolName": "request_secrets",
+      "toolId": "kanna-0894481d-51e5-43b7-b941-7b7c3041e1b1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "b576b9a0-6fef-4eb1-9969-6a3a70565281",
+     "createdAt": 1793452053727,
+     "kind": "user_prompt",
+     "content": "make a demo chart",
+     "attachments": []
+    },
+    {
+     "_id": "b478466a-e414-4575-9fba-df757f9df276",
+     "createdAt": 1793452056007,
+     "kind": "account_info",
+     "accountInfo": {}
+    },
+    {
+     "_id": "3b3cc661-2d5c-4ffc-877c-7cb956d6a3da",
+     "createdAt": 1793452056058,
+     "kind": "system_init",
+     "messageId": "a1452acf-b014-4962-91d4-db1f7f869e62",
+     "provider": "claude",
+     "model": "claude-opus-5-5[1m]",
+     "tools": [],
+     "agents": [],
+     "slashCommands": [],
+     "mcpServers": []
+    },
+    {
+     "_id": "08661f61-faba-4385-9885-a8b5b5bfef3d",
+     "createdAt": 1793452064758,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "6639b498-0631-4eb4-951e-0827f7ed88c0",
+     "createdAt": 1793452088246,
+     "kind": "tool_call",
+     "tool": {
+      "kind": "tool",
+      "toolKind": "display",
+      "toolName": "show_visualization",
+      "toolId": "kanna-ab712944-fac1-40e8-8d0e-3d9b87797407",
+      "input": {}
+     }
+    },
+    {
+     "_id": "1afa75e4-b33d-4310-bc53-f73e2f4de76d",
+     "createdAt": 1793452088249,
+     "kind": "tool_result",
+     "toolId": "kanna-ab712944-fac1-40e8-8d0e-3d9b87797407",
+     "content": "ok"
+    },
+    {
+     "_id": "276eae4f-c57d-4e5d-b05b-2c39330ff90f",
+     "createdAt": 1793452091455,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "23825223-a98c-4ec9-9dce-068b95e94f11",
+     "createdAt": 1793452091456,
+     "kind": "assistant_text",
+     "messageId": "119ac9c3-e226-477a-8e77-48275a72e722",
+     "text": "The chart is above: daily signups over 30 days, web and iOS."
+    },
+    {
+     "_id": "e074cfda-6bd7-41f5-a188-c765eb4bafee",
+     "createdAt": 1793452092165,
+     "kind": "context_window_updated",
+     "usage": {
+      "usedTokens": 1,
+      "maxTokens": 2
+     }
+    },
+    {
+     "_id": "6e8ae883-be63-480a-a430-d34def0fc267",
+     "createdAt": 1793452092166,
+     "kind": "result",
+     "messageId": "c30ac1a3-c5ac-401a-af5d-85d04779f309",
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 35467,
+     "result": "The chart is above: daily signups over 30 days, web and iOS. The numbers are made up for the demo.\n\nYou can switch between 7, 14 and 30 days. Hovering or dragging along the chart shows each day's figures, and the arrow keys step through the days once it has focus.",
+     "costUsd": 1.5677384
+    }
+   ],
+   "folds": [
+    {
+     "id": "012aa0ec-d4b9-430f-8c1f-9289817523c6",
+     "header": "48855234-1643-4a64-81e2-7825494584a1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 8923,
+     "label": "Worked for 8s",
+     "roles": {
+      "48855234-1643-4a64-81e2-7825494584a1": "folded",
+      "9a30f33c-d019-4fed-860e-5b5afe541c09": "kept",
+      "78a416e3-b839-4e5e-8b02-f47dd03572d8": "reply",
+      "cc81bb3b-94ea-490b-90c1-1d531b400e70": "kept",
+      "bada011d-c834-4e86-bd35-df5878583a37": "end"
+     }
+    },
+    {
+     "id": "289bd660-b582-4fb6-9c31-a1933678997a",
+     "header": "021310a1-d4e4-4e2b-a763-44e5b51c7f25",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 8225,
+     "label": "Worked for 8s",
+     "roles": {
+      "021310a1-d4e4-4e2b-a763-44e5b51c7f25": "folded",
+      "a06c1049-38eb-471b-9e21-543759093486": "kept",
+      "ac8e6073-2364-4017-a7bf-4d74f2b1cf32": "reply",
+      "4d35b012-738d-45d8-a215-619d16cdfff2": "kept",
+      "26ee8560-5751-4d6b-bced-7baa657dc950": "end"
+     }
+    },
+    {
+     "id": "d9c8e3f8-4d50-409b-b170-5d8e0b4bc311",
+     "header": "32ce6296-1f84-4a66-a9de-7223e7cccc36",
+     "settled": true,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 2156,
+     "label": "Worked for 2s",
+     "roles": {
+      "32ce6296-1f84-4a66-a9de-7223e7cccc36": "reply",
+      "187f822a-aa3c-4ceb-b541-7345c6c22972": "kept",
+      "6cf5e5d8-bc34-457a-bf97-3e95baa90c36": "end"
+     }
+    },
+    {
+     "id": "902f6b2d-7aeb-4768-ab3e-4a9c89462060",
+     "header": "6e961f70-8d88-46d8-b2d9-9c5f584670d3",
+     "settled": true,
+     "folds": false,
+     "outcome": "stopped",
+     "workedMs": null,
+     "label": "Stopped \u00b7 Show work",
+     "roles": {
+      "6e961f70-8d88-46d8-b2d9-9c5f584670d3": "folded"
+     }
+    },
+    {
+     "id": "b576b9a0-6fef-4eb1-9969-6a3a70565281",
+     "header": "6639b498-0631-4eb4-951e-0827f7ed88c0",
+     "settled": true,
+     "folds": false,
+     "outcome": "completed",
+     "workedMs": 35467,
+     "label": "Worked for 35s",
+     "roles": {
+      "6639b498-0631-4eb4-951e-0827f7ed88c0": "kept",
+      "276eae4f-c57d-4e5d-b05b-2c39330ff90f": "kept",
+      "23825223-a98c-4ec9-9dce-068b95e94f11": "reply",
+      "e074cfda-6bd7-41f5-a188-c765eb4bafee": "kept",
+      "6e8ae883-be63-480a-a430-d34def0fc267": "end"
+     }
+    }
+   ],
+   "workingSince": null
+  },
+  {
+   "name": "Product: each turn the delegator ends folds on its own",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "a0",
+     "kind": "assistant_text",
+     "createdAt": 500,
+     "text": "Sending it over."
+    },
+    {
+     "_id": "cs1",
+     "kind": "tool_call",
+     "createdAt": 1000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "chat",
+      "toolName": "send_message",
+      "toolId": "tool-cs1",
+      "input": {
+       "payload": {
+        "chatId": "chatD",
+        "message": "Put it through the ringer."
+       }
+      }
+     }
+    },
+    {
+     "_id": "rs1",
+     "kind": "tool_result",
+     "createdAt": 1100,
+     "toolId": "tool-cs1",
+     "content": "{\"started\":true}"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 2000,
+     "text": "I've sent this to the demo chat."
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 3000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 3000,
+     "result": ""
+    },
+    {
+     "_id": "rp1",
+     "kind": "user_prompt",
+     "createdAt": 60000,
+     "content": "<system-message>Sub-chat completed: chatD (chat id chatD)</system-message>\n\nI'd ship hot reload first.",
+     "source": {
+      "kind": "report",
+      "chatIds": [
+       "chatD"
+      ]
+     }
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 61000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 61500,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "a2",
+     "kind": "assistant_text",
+     "createdAt": 62000,
+     "text": "Do it: ship hot reload first."
+    },
+    {
+     "_id": "res2",
+     "kind": "result",
+     "createdAt": 63000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 3000,
+     "result": ""
+    },
+    {
+     "_id": "rp2",
+     "kind": "user_prompt",
+     "createdAt": 90000,
+     "content": "<system-message>Sub-chat completed: chatD (chat id chatD)</system-message>\n\nOne leftover background check stopped.",
+     "source": {
+      "kind": "report",
+      "chatIds": [
+       "chatD"
+      ]
+     }
+    },
+    {
+     "_id": "c3",
+     "kind": "tool_call",
+     "createdAt": 90500,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c3",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r3",
+     "kind": "tool_result",
+     "createdAt": 90700,
+     "toolId": "tool-c3",
+     "content": "ok"
+    },
+    {
+     "_id": "a3",
+     "kind": "assistant_text",
+     "createdAt": 91000,
+     "text": "Nothing changed."
+    },
+    {
+     "_id": "res3",
+     "kind": "result",
+     "createdAt": 92000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 1000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "a0",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 3000,
+     "label": "Worked for 3s",
+     "roles": {
+      "a0": "folded",
+      "cs1": "folded",
+      "a1": "reply",
+      "res1": "end"
+     },
+     "chatCards": [
+      {
+       "chatId": "chatD",
+       "anchorEntryId": "cs1",
+       "last": "sent",
+       "lastEntryId": "cs1",
+       "preview": "Put it through the ringer."
+      }
+     ]
+    },
+    {
+     "id": "rp1",
+     "header": "c1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 3000,
+     "label": "Worked for 3s",
+     "roles": {
+      "c1": "folded",
+      "a2": "reply",
+      "res2": "end"
+     }
+    },
+    {
+     "id": "rp2",
+     "header": "c3",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 1000,
+     "label": "Worked for 1s",
+     "roles": {
+      "c3": "folded",
+      "a3": "reply",
+      "res3": "end"
+     }
+    }
+   ]
+  },
+  {
+   "name": "A turn that ended without text has no reply",
+   "atRest": true,
+   "entries": [
+    {
+     "_id": "p1",
+     "kind": "user_prompt",
+     "createdAt": 0,
+     "content": "do it"
+    },
+    {
+     "_id": "cc1",
+     "kind": "tool_call",
+     "createdAt": 1000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "chat",
+      "toolName": "create_chat",
+      "toolId": "tool-cc1",
+      "input": {
+       "payload": {
+        "message": "Go."
+       }
+      }
+     }
+    },
+    {
+     "_id": "rc1",
+     "kind": "tool_result",
+     "createdAt": 1100,
+     "toolId": "tool-cc1",
+     "content": "{\"chatId\":\"chatE\"}"
+    },
+    {
+     "_id": "res1",
+     "kind": "result",
+     "createdAt": 2000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 2000,
+     "result": ""
+    },
+    {
+     "_id": "rp1",
+     "kind": "user_prompt",
+     "createdAt": 30000,
+     "content": "<system-message>Sub-chat completed: chatE (chat id chatE)</system-message>\n\nDone.",
+     "source": {
+      "kind": "report",
+      "chatIds": [
+       "chatE"
+      ]
+     }
+    },
+    {
+     "_id": "c1",
+     "kind": "tool_call",
+     "createdAt": 31000,
+     "tool": {
+      "kind": "tool",
+      "toolKind": "bash",
+      "toolName": "Bash",
+      "toolId": "tool-c1",
+      "input": {}
+     }
+    },
+    {
+     "_id": "r1",
+     "kind": "tool_result",
+     "createdAt": 31500,
+     "toolId": "tool-c1",
+     "content": "ok"
+    },
+    {
+     "_id": "a1",
+     "kind": "assistant_text",
+     "createdAt": 32000,
+     "text": "It's done."
+    },
+    {
+     "_id": "res2",
+     "kind": "result",
+     "createdAt": 33000,
+     "subtype": "success",
+     "isError": false,
+     "durationMs": 3000,
+     "result": ""
+    }
+   ],
+   "folds": [
+    {
+     "id": "p1",
+     "header": "cc1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 2000,
+     "label": "Worked for 2s",
+     "roles": {
+      "cc1": "folded",
+      "res1": "end"
+     },
+     "chatCards": [
+      {
+       "chatId": "chatE",
+       "anchorEntryId": "cc1",
+       "last": "started",
+       "lastEntryId": "cc1",
+       "preview": "Go."
+      }
+     ]
+    },
+    {
+     "id": "rp1",
+     "header": "c1",
+     "settled": true,
+     "folds": true,
+     "outcome": "completed",
+     "workedMs": 3000,
+     "label": "Worked for 3s",
+     "roles": {
+      "c1": "folded",
+      "a1": "reply",
+      "res2": "end"
+     }
+    }
+   ]
+  }
+ ]
+}

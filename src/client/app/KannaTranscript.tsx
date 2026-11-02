@@ -24,8 +24,10 @@ import type { ForkBoundary as ForkBoundaryPosition } from "../lib/fork-boundary"
 import { StatusMessage } from "../components/messages/StatusMessage"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
 import { foldRuns } from "../lib/fold-runs"
+import { TurnFoldChatCard, TurnFoldHeader } from "../components/messages/TurnFoldHeader"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "./chatFocusPolicy"
 import { SPECIAL_TOOL_NAMES } from "./derived"
+import type { ResolvedFoldChatCardTranscriptRow, ResolvedFoldHeaderTranscriptRow } from "./turnFolds"
 
 const SPECIAL_TOOL_NAME_SET = new Set<string>(SPECIAL_TOOL_NAMES)
 
@@ -59,6 +61,8 @@ export interface ResolvedSingleTranscriptRow {
   showsOwnBoundary?: boolean
   /** On a fork's last copied row: the "Forked from" line goes after it. */
   forkBoundary?: ForkBoundaryMark
+  /** On the result that closes a folded turn: its header says how long the turn took, so the rule does not. */
+  endsFold?: boolean
 }
 
 export interface ResolvedToolGroupTranscriptRow {
@@ -87,7 +91,11 @@ function sameForkBoundary(left: ForkBoundaryMark | undefined, right: ForkBoundar
   return left?.sourceChatId === right?.sourceChatId && left?.at === right?.at
 }
 
-export type ResolvedTranscriptRow = ResolvedSingleTranscriptRow | ResolvedToolGroupTranscriptRow
+export type ResolvedTranscriptRow =
+  | ResolvedSingleTranscriptRow
+  | ResolvedToolGroupTranscriptRow
+  | ResolvedFoldHeaderTranscriptRow
+  | ResolvedFoldChatCardTranscriptRow
 
 export interface StableResolvedTranscriptRowsState {
   byId: Map<string, ResolvedTranscriptRow>
@@ -502,9 +510,21 @@ function isResolvedTranscriptRowUnchanged(left: ResolvedTranscriptRow, right: Re
       && left.nextPromptTimestamp === right.nextPromptTimestamp
       && left.nextPromptOrigin === right.nextPromptOrigin
       && left.showsOwnBoundary === right.showsOwnBoundary
+      && left.endsFold === right.endsFold
       && sameForkBoundary(left.forkBoundary, right.forkBoundary)
       && sameMessage(left.message, right.message)
     )
+  }
+
+  if (left.kind === "fold-chat-card" && right.kind === "fold-chat-card") {
+    return JSON.stringify(left.card) === JSON.stringify(right.card)
+  }
+
+  if (left.kind === "fold-header" && right.kind === "fold-header") {
+    return left.open === right.open
+      && left.outcome === right.outcome
+      && left.workedMs === right.workedMs
+      && left.hiddenAgentCount === right.hiddenAgentCount
   }
 
   if (left.kind === "tool-group" && right.kind === "tool-group") {
@@ -575,6 +595,7 @@ interface TranscriptSingleRowProps {
   /** On a prompt nobody typed that no result's boundary introduces: it draws its own. */
   showsOwnBoundary?: boolean
   forkBoundary?: ForkBoundaryMark
+  endsFold?: boolean
   onAskUserQuestionSubmit: (
     toolUseId: string,
     questions: AskUserQuestionItem[],
@@ -603,6 +624,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   nextPromptOrigin,
   showsOwnBoundary,
   forkBoundary,
+  endsFold,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
 }: TranscriptSingleRowProps) {
@@ -686,7 +708,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
         // says where the copy ends: one line, not two stacked.
         rendered = hideResult ? null
           : forkBoundary && message.success ? <ForkBoundary sourceChatId={forkBoundary.sourceChatId} at={forkBoundary.at} />
-          : <ResultMessage key={message.id} message={message} nextPromptTimestamp={nextPromptTimestamp} nextPromptOrigin={nextPromptOrigin} />
+          : <ResultMessage key={message.id} message={message} nextPromptTimestamp={nextPromptTimestamp} nextPromptOrigin={nextPromptOrigin} endsFold={endsFold} />
         break
       case "context_window_updated":
         rendered = null
@@ -745,6 +767,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   && prev.nextPromptTimestamp === next.nextPromptTimestamp
   && prev.nextPromptOrigin === next.nextPromptOrigin
   && prev.showsOwnBoundary === next.showsOwnBoundary
+  && prev.endsFold === next.endsFold
   && sameForkBoundary(prev.forkBoundary, next.forkBoundary)
   && prev.onAskUserQuestionSubmit === next.onAskUserQuestionSubmit
   && prev.onExitPlanModeConfirm === next.onExitPlanModeConfirm
@@ -822,7 +845,7 @@ export function buildResolvedTranscriptRows(
 ): ResolvedTranscriptRow[] {
   const renderStates = buildTranscriptMessageRenderStates(messages, latestToolIds)
   const renderItems = buildTranscriptRenderItems(messages, renderStates)
-  const rows: ResolvedTranscriptRow[] = []
+  const rows: Array<ResolvedSingleTranscriptRow | ResolvedToolGroupTranscriptRow> = []
 
   for (const item of renderItems) {
     if (item.type === "tool-group") {
@@ -893,6 +916,8 @@ interface KannaTranscriptRowProps {
   flash?: boolean
   toolGroupExpanded?: boolean
   onToolGroupExpandedChange: (groupId: string, next: boolean) => void
+  /** A fold header was clicked. Absent where nothing folds (the export viewer). */
+  onTurnFoldToggle?: (foldId: string, rowId: string) => void
   onAskUserQuestionSubmit: (
     toolUseId: string,
     questions: AskUserQuestionItem[],
@@ -906,9 +931,25 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
   flash,
   toolGroupExpanded,
   onToolGroupExpandedChange,
+  onTurnFoldToggle,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
 }: KannaTranscriptRowProps) {
+  if (row.kind === "fold-chat-card") {
+    return <TurnFoldChatCard card={row.card} />
+  }
+
+  if (row.kind === "fold-header") {
+    return (
+      <TurnFoldHeader
+        open={row.open}
+        outcome={row.outcome}
+        workedMs={row.workedMs}
+        onToggle={() => onTurnFoldToggle?.(row.foldId, row.id)}
+      />
+    )
+  }
+
   if (row.kind === "tool-group") {
     return (
       <TranscriptToolGroup
@@ -945,6 +986,7 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
       nextPromptOrigin={row.nextPromptOrigin}
       showsOwnBoundary={row.showsOwnBoundary}
       forkBoundary={row.forkBoundary}
+      endsFold={row.endsFold}
       onAskUserQuestionSubmit={onAskUserQuestionSubmit}
       onExitPlanModeConfirm={onExitPlanModeConfirm}
     />
@@ -955,10 +997,22 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
   if (prev.flash !== next.flash) return false
   if (prev.toolGroupExpanded !== next.toolGroupExpanded) return false
   if (prev.onToolGroupExpandedChange !== next.onToolGroupExpandedChange) return false
+  if (prev.onTurnFoldToggle !== next.onTurnFoldToggle) return false
   if (prev.onAskUserQuestionSubmit !== next.onAskUserQuestionSubmit) return false
   if (prev.onExitPlanModeConfirm !== next.onExitPlanModeConfirm) return false
   if (prev.row.kind !== next.row.kind) return false
   if (prev.row.id !== next.row.id) return false
+
+  if (prev.row.kind === "fold-header" && next.row.kind === "fold-header") {
+    return prev.row.open === next.row.open
+      && prev.row.outcome === next.row.outcome
+      && prev.row.workedMs === next.row.workedMs
+  }
+  if (prev.row.kind === "fold-chat-card" && next.row.kind === "fold-chat-card") {
+    return JSON.stringify(prev.row.card) === JSON.stringify(next.row.card)
+  }
+  if (prev.row.kind === "fold-header" || next.row.kind === "fold-header") return false
+  if (prev.row.kind === "fold-chat-card" || next.row.kind === "fold-chat-card") return false
   if (!sameForkBoundary(prev.row.forkBoundary, next.row.forkBoundary)) return false
 
   if (prev.row.kind === "tool-group" && next.row.kind === "tool-group") {
@@ -988,6 +1042,7 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
       && prev.row.nextPromptTimestamp === next.row.nextPromptTimestamp
       && prev.row.nextPromptOrigin === next.row.nextPromptOrigin
       && prev.row.showsOwnBoundary === next.row.showsOwnBoundary
+      && prev.row.endsFold === next.row.endsFold
       && sameMessage(prev.row.message, next.row.message)
   }
 

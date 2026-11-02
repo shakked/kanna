@@ -93,10 +93,8 @@ function creditsSummary(credits: NonNullable<ProviderUsageSnapshot["credits"]>):
   }
   if (credits.usedPercent != null) parts.push(`${formatPercent(credits.usedPercent)} used`)
   if (credits.limitReached) parts.push("Limit reached")
-  if (credits.resetsAt) {
-    const until = formatUntil(credits.resetsAt)
-    if (until) parts.push(`Resets ${until}`)
-  }
+  const until = credits.resetsAt ? formatUntil(credits.resetsAt) : null
+  if (until) parts.push(`Resets ${until}`)
   if (credits.detail) {
     // Codex reports its prepaid balance as a bare numeric string ("1000");
     // render it as a remaining count. Non-numeric details ("Unlimited") pass through.

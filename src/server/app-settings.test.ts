@@ -362,6 +362,44 @@ describe("AppSettingsManager", () => {
     manager.dispose()
   })
 
+  test("Disable pre-configured MCP is off unless turned on, and is written only when on", async () => {
+    const filePath = await createTempFilePath()
+    const manager = new AppSettingsManager(filePath)
+    await manager.initialize()
+
+    expect(manager.getSnapshot()).not.toHaveProperty("disablePreconfiguredMcp")
+    expect((await manager.writePatch({ disablePreconfiguredMcp: true })).disablePreconfiguredMcp).toBe(true)
+    expect((JSON.parse(await readFile(filePath, "utf8")) as { disablePreconfiguredMcp?: boolean }).disablePreconfiguredMcp).toBe(true)
+    expect(await manager.writePatch({ disablePreconfiguredMcp: false })).not.toHaveProperty("disablePreconfiguredMcp")
+    expect(JSON.parse(await readFile(filePath, "utf8"))).not.toHaveProperty("disablePreconfiguredMcp")
+
+    // Anything but true is off.
+    await writeFile(filePath, JSON.stringify({ disablePreconfiguredMcp: "yes" }), "utf8")
+    await manager.reload()
+    expect(manager.getSnapshot()).not.toHaveProperty("disablePreconfiguredMcp")
+
+    manager.dispose()
+  })
+
+  test("the Kanna Cloud setup prompt shows unless dismissed, and the flag is written only when set", async () => {
+    const filePath = await createTempFilePath()
+    const manager = new AppSettingsManager(filePath)
+    await manager.initialize()
+
+    expect(manager.getSnapshot()).not.toHaveProperty("cloudSetupDismissed")
+    expect((await manager.writePatch({ cloudSetupDismissed: true })).cloudSetupDismissed).toBe(true)
+    expect((JSON.parse(await readFile(filePath, "utf8")) as { cloudSetupDismissed?: boolean }).cloudSetupDismissed).toBe(true)
+    expect(await manager.writePatch({ cloudSetupDismissed: false })).not.toHaveProperty("cloudSetupDismissed")
+    expect(JSON.parse(await readFile(filePath, "utf8"))).not.toHaveProperty("cloudSetupDismissed")
+
+    // Anything but true shows the prompt.
+    await writeFile(filePath, JSON.stringify({ cloudSetupDismissed: "yes" }), "utf8")
+    await manager.reload()
+    expect(manager.getSnapshot()).not.toHaveProperty("cloudSetupDismissed")
+
+    manager.dispose()
+  })
+
   test("keeps pane visibility per chat by default, and patches one pane without the other", async () => {
     const filePath = await createTempFilePath()
     const manager = new AppSettingsManager(filePath)

@@ -223,9 +223,25 @@ interface ChannelRowProps {
   onSelect: (projectId: string) => void
 }
 
+/** The right end of a channel row: its count of chats that want you. */
+export function ChannelRowTrailing({ attentionCount }: { attentionCount: number }) {
+  if (attentionCount === 0) return null
+  // Neutral: the mark on the left carries the colour. A tint of the text
+  // colour rather than `bg-muted`, which is the selected row's own
+  // background and would hide the badge there.
+  return (
+    <span
+      data-channel-badge
+      className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-[5px] bg-foreground/10 px-1 text-[11px] font-bold leading-none text-foreground"
+    >
+      {attentionCount}
+    </span>
+  )
+}
+
 /**
- * A project as a channel: its mark, its name, and a count of the chats that
- * want you (unread, or waiting on an answer). The mark is the project's icon
+ * A project as a channel: its mark, its name, and a count of the chats
+ * that want you (unread, or waiting on an answer). The mark is the project's icon
  * while every chat in it is idle and read, and otherwise the status glyph of
  * its most pressing chat, in the icon's slot so the name never shifts. Bold
  * means something in it is unread, as a Slack channel's is.
@@ -295,14 +311,7 @@ const ChannelRow = memo(function ChannelRow({ group, active, menuPinned, pinned,
               {statusMark ?? <ProjectIcon name={group.title} iconUrl={group.iconUrl} />}
             </span>
             <span className="min-w-0 flex-1 truncate">{group.title}</span>
-            {/* Neutral: the mark on the left carries the colour. A tint of the
-                text colour rather than `bg-muted`, which is the selected row's
-                own background and would hide the badge there. */}
-            {attentionCount > 0 ? (
-              <span className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-[5px] bg-foreground/10 px-1 text-[11px] font-bold leading-none text-foreground">
-                {attentionCount}
-              </span>
-            ) : null}
+            <ChannelRowTrailing attentionCount={attentionCount} />
           </span>
         </button>
     </ProjectSectionMenu>

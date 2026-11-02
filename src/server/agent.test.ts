@@ -8,6 +8,7 @@ import {
   buildConcurrentAgentsNotice,
   buildPromptText,
   buildSteeredMessageContent,
+  claudeLaunchOptions,
   claudeSystemPrompt,
   claudeToolset,
   formatQuestionAnswersFollowUp,
@@ -22,6 +23,8 @@ import type { SubagentActivityUpdate } from "./background-tasks"
 import type { ChatAttachment, TranscriptEntry } from "../shared/types"
 import type { SessionArtifactStatus } from "./session-artifacts"
 import { timestamped } from "./transcript"
+import { createKannaToolGateway } from "./kanna-tool-gateway"
+import { runKannaToolCli } from "./kanna-tool-cli"
 
 async function waitFor(condition: () => boolean, timeoutMs = 2000) {
   const start = Date.now()
@@ -3472,6 +3475,58 @@ describe("subagent activity", () => {
   })
 })
 
+describe("Kanna tools from the agent's shell", () => {
+  test("grok's shell gets its chat's credential, is told to use it, and calls run as that chat's turn", async () => {
+    let release!: () => void
+    let started: { env?: Record<string, string>; content: string } | undefined
+    const fakeGrokManager = {
+      async startTurn(args: { env?: Record<string, string>; content: string }): Promise<HarnessTurn> {
+        started = args
+        async function* stream() {
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({ kind: "system_init", provider: "grok", model: "grok-4", tools: [], agents: [], slashCommands: [], mcpServers: [] }),
+          }
+          await new Promise<void>((resolve) => { release = resolve })
+        }
+        return { provider: "grok", stream: stream(), interrupt: async () => release(), close: () => {} }
+      },
+    }
+    const toolGateway = createKannaToolGateway({ isLive: () => true })
+    const agent = new AgentCoordinator({
+      store: createFakeStore() as never,
+      onStateChange: () => {},
+      grokManager: fakeGrokManager as never,
+      toolGateway,
+    })
+    const call = async (env: Record<string, string>) => {
+      let stdout = "", stderr = ""
+      const code = await runKannaToolCli(["get_context"], { env, stdout: (text) => { stdout += text }, stderr: (text) => { stderr += text }, readStdin: async () => "" })
+      return { code, stdout, stderr }
+    }
+    try {
+      await agent.send({ type: "chat.send", chatId: "chat-1", provider: "grok", content: "work" })
+      await waitFor(() => agent.getActiveStatuses().get("chat-1") === "running")
+      const env = started!.env!
+      expect(env.KANNA_CHAT_ID).toBe("chat-1")
+      expect(env.KANNA_TOOLS_URL).toStartWith("http://127.0.0.1:")
+      expect(env.KANNA_TOOLS_AUTH).toBeString()
+      // Grok takes no MCP tools, so it hears of them as commands.
+      expect(started!.content).toContain("# Kanna tools as commands")
+      expect(started!.content).toContain("You have no Kanna tools to call directly.")
+      expect(started!.content).toContain("`create_chat`")
+
+      // The call reached this chat's own tool runtime. The fake has no orchestrator behind it.
+      expect(await call(env)).toMatchObject({ code: 1, stderr: expect.stringContaining("The chat tools are not available in this session.") })
+
+      await agent.cancel("chat-1")
+      expect(await call(env)).toMatchObject({ code: 1, stderr: expect.stringContaining("Chat turn ended") })
+    } finally {
+      toolGateway.close()
+    }
+  })
+})
+
 describe("waiting on a subagent", () => {
   function coordinator() {
     return new AgentCoordinator({ store: createFakeStore() as never, onStateChange: () => {} })
@@ -4019,6 +4074,132 @@ describe("a chat made a delegator, or an ordinary chat again, mid-conversation",
     await waitFor(() => store.turnFinishedCount === 1)
     expect(coordinator.isBusy("chat-1")).toBe(false)
     queues[1]!.close()
+    coordinator.dispose()
+  })
+})
+
+describe("disable pre-configured MCP servers", () => {
+  test("claude: off, the launch keeps the user's MCP config and connectors", () => {
+    const options = claudeLaunchOptions({ env: { PATH: "/bin", CLAUDECODE: "1" } })
+    expect(options).toEqual({
+      settings: { enableWorkflows: true, fastMode: false },
+      env: { PATH: "/bin" },
+    })
+  })
+
+  test("claude: on, the launch is strict and skips claude.ai connectors", () => {
+    const options = claudeLaunchOptions({
+      serviceTier: "fast",
+      disablePreconfiguredMcp: true,
+      env: { PATH: "/bin", CLAUDECODE: "1" },
+    })
+    expect(options).toEqual({
+      settings: { enableWorkflows: true, fastMode: true, disableClaudeAiConnectors: true },
+      env: { PATH: "/bin", ENABLE_CLAUDEAI_MCP_SERVERS: "false" },
+      strictMcpConfig: true,
+    })
+  })
+
+  test("claude: a flip during a turn leaves the session alone, and the next turn restarts with the setting and resumes", async () => {
+    const queues: AsyncEventQueue<any>[] = []
+    const promptIds: string[][] = []
+    const starts: Array<{ disablePreconfiguredMcp?: boolean; sessionToken: string | null; mcpServers: boolean }> = []
+    let disable = false
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      disablePreconfiguredMcp: () => disable,
+      startClaudeSession: async (args) => {
+        starts.push({
+          disablePreconfiguredMcp: args.disablePreconfiguredMcp,
+          sessionToken: args.sessionToken,
+          // Kanna's own server is handed over either way.
+          mcpServers: Boolean(args.customTools),
+        })
+        const events = new AsyncEventQueue<any>()
+        const index = queues.push(events) - 1
+        promptIds.push([])
+        return {
+          provider: "claude",
+          echoesPromptIds: true,
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => events.close(),
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          sendPrompt: async (_content: string, promptId?: string) => { promptIds[index]!.push(promptId!) },
+        }
+      },
+    })
+    const result = (index: number, prompt: number) => queues[index]!.push({
+      type: "transcript",
+      entry: timestamped({ kind: "result", subtype: "success", isError: false, durationMs: 0, result: "done" }),
+      promptIds: [promptIds[index]![prompt]],
+    })
+
+    await coordinator.send({ type: "chat.send", chatId: "chat-1", provider: "claude", content: "one", model: "claude-opus-4-1" })
+    queues[0]!.push({ type: "session_token", sessionToken: "claude-session-1" })
+    await waitFor(() => store.chat.sessionToken === "claude-session-1")
+
+    disable = true
+    await coordinator.enqueue({ type: "message.enqueue", chatId: "chat-1", content: "two" })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(starts).toHaveLength(1)
+
+    result(0, 0)
+    await waitFor(() => starts.length === 2)
+    expect(starts.map(({ disablePreconfiguredMcp, sessionToken }) => ({ disablePreconfiguredMcp, sessionToken }))).toEqual([
+      { disablePreconfiguredMcp: undefined, sessionToken: null },
+      { disablePreconfiguredMcp: true, sessionToken: "claude-session-1" },
+    ])
+    expect(starts[1]!.mcpServers).toBe(starts[0]!.mcpServers)
+
+    // Unchanged, the next turn reuses the session.
+    result(1, 0)
+    await waitFor(() => store.turnFinishedCount === 2)
+    await coordinator.send({ type: "chat.send", chatId: "chat-1", provider: "claude", content: "three", model: "claude-opus-4-1" })
+    expect(starts).toHaveLength(2)
+    result(1, 1)
+    await waitFor(() => store.turnFinishedCount === 3)
+    coordinator.dispose()
+  })
+
+  test("codex: the setting reaches the session start of each turn", async () => {
+    const sessionArgs: Array<{ disablePreconfiguredMcp?: boolean }> = []
+    const store = createFakeStore()
+    const turn = (): HarnessTurn => ({
+      provider: "codex",
+      stream: (async function* () {
+        yield { type: "transcript", entry: timestamped({ kind: "result", subtype: "success", isError: false, durationMs: 0, result: "done" }) }
+      })() as never,
+      interrupt: async () => {},
+      close: () => {},
+    })
+    let disable = true
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      disablePreconfiguredMcp: () => disable,
+      codexManager: {
+        getSessionPids: () => new Map<string, number>(),
+        async startSession(args: { disablePreconfiguredMcp?: boolean }) {
+          sessionArgs.push({ disablePreconfiguredMcp: args.disablePreconfiguredMcp })
+          return { sessionToken: "thread-1", resumeFellBack: false }
+        },
+        async startTurn() { return turn() },
+        stopSession() {},
+        stopAll() {},
+      } as never,
+    })
+
+    await coordinator.send({ type: "chat.send", chatId: "chat-1", provider: "codex", content: "one", model: "gpt-5.5" })
+    await waitFor(() => store.turnFinishedCount === 1)
+    disable = false
+    await coordinator.send({ type: "chat.send", chatId: "chat-1", provider: "codex", content: "two", model: "gpt-5.5" })
+    await waitFor(() => store.turnFinishedCount === 2)
+    expect(sessionArgs).toEqual([{ disablePreconfiguredMcp: true }, { disablePreconfiguredMcp: false }])
     coordinator.dispose()
   })
 })

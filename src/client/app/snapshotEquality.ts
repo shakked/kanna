@@ -174,6 +174,19 @@ export function shouldPreserveExistingProjectDiffs(
   )
 }
 
+/** What an incremental push leaves the client holding: the held folds plus the new ones. */
+function mergeTurnFolds(held: ChatSnapshot["turnFolds"], incoming: ChatSnapshot["turnFolds"]): ChatSnapshot["turnFolds"] {
+  if (!incoming) return held
+  if (!held) return incoming
+  const { folds, ...running } = incoming
+  return { ...running, folds: { ...held.folds, ...folds } }
+}
+
+/** The folds are a few ids per turn, and change only when a turn settles. */
+function sameTurnFolds(left: ChatSnapshot["turnFolds"], right: ChatSnapshot["turnFolds"]) {
+  return left === right || JSON.stringify(left) === JSON.stringify(right)
+}
+
 export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | null) {
   if (left === right) return true
   if (!left || !right) return false
@@ -181,6 +194,7 @@ export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnaps
     && sameQueuedMessages(left.queuedMessages, right.queuedMessages)
     && sameTranscriptEntries(left.messages, right.messages)
     && sameProviders(left.availableProviders, right.availableProviders)
+    && sameTurnFolds(left.turnFolds, right.turnFolds)
 }
 
 /**
@@ -225,13 +239,13 @@ export function applyIncrementalChatSnapshot(
  * router's staleness tests compare and what the local cache is keyed on.
  */
 function assembleFolded(
-  current: Pick<ChatSnapshot, "messages" | "startIndex"> & Partial<Pick<ChatSnapshot, "availableProviders" | "readAnchor" | "outline">>,
+  current: Pick<ChatSnapshot, "messages" | "startIndex"> & Partial<Pick<ChatSnapshot, "availableProviders" | "readAnchor" | "outline" | "turnFolds">>,
   incoming: ChatSnapshot,
   messages: TranscriptEntry[],
   startIndex: number,
 ): ChatSnapshot {
   const carried = carriedFields(current, incoming)
-  const { runtime, queuedMessages, availableProviders, readAnchor, outline, incremental, messages: _m, startIndex: _s, ...rest } = incoming
+  const { runtime, queuedMessages, availableProviders, readAnchor, outline, turnFolds, incremental, messages: _m, startIndex: _s, ...rest } = incoming
   return {
     ...rest,
     runtime,
@@ -241,6 +255,7 @@ function assembleFolded(
     availableProviders: carried.availableProviders ?? availableProviders,
     readAnchor: carried.readAnchor ?? null,
     ...("outline" in carried ? { outline: carried.outline } : outline !== undefined ? { outline } : {}),
+    ...(carried.turnFolds !== undefined ? { turnFolds: carried.turnFolds } : {}),
     incremental: false,
   }
 }
@@ -251,15 +266,18 @@ function assembleFolded(
  * held snapshot still has them, so they carry forward.
  */
 function carriedFields(
-  current: Pick<ChatSnapshot, "messages" | "startIndex"> & Partial<Pick<ChatSnapshot, "availableProviders" | "readAnchor" | "outline">>,
+  current: Pick<ChatSnapshot, "messages" | "startIndex"> & Partial<Pick<ChatSnapshot, "availableProviders" | "readAnchor" | "outline" | "turnFolds">>,
   incoming: ChatSnapshot,
-): Partial<Pick<ChatSnapshot, "availableProviders" | "readAnchor" | "outline">> {
+): Partial<Pick<ChatSnapshot, "availableProviders" | "readAnchor" | "outline" | "turnFolds">> {
   return {
     availableProviders: incoming.availableProviders ?? current.availableProviders,
     readAnchor: incoming.readAnchor === undefined ? current.readAnchor ?? null : incoming.readAnchor,
     // Omitted means "same as before"; the server sends it only when a
     // prompt was added.
     ...(incoming.outline === undefined && current.outline !== undefined ? { outline: current.outline } : {}),
+    // The folds an incremental push carries are the new ones: they are added
+    // to those held, which never change. Absent, nothing changed.
+    ...(mergeTurnFolds(current.turnFolds, incoming.turnFolds) ? { turnFolds: mergeTurnFolds(current.turnFolds, incoming.turnFolds) } : {}),
   }
 }
 
@@ -310,6 +328,9 @@ export function foldChatSnapshot(
     availableProviders: sameProviders(current.availableProviders, next.availableProviders)
       ? current.availableProviders
       : next.availableProviders,
+    ...(next.turnFolds !== undefined
+      ? { turnFolds: sameTurnFolds(current.turnFolds, next.turnFolds) ? current.turnFolds : next.turnFolds }
+      : {}),
   }
 }
 

@@ -365,6 +365,14 @@ function KannaLayout() {
   const handleOpenChangelog = useCallback(() => {
     navigate("/settings/changelog")
   }, [navigate])
+  const handleDismissCloudSetup = useCallback(() => {
+    // handleWriteAppSettings applies the patch to the settings store before the
+    // round trip, so the row hides at once; on failure it re-reads the server's
+    // settings (which brings the row back) and rethrows.
+    void state.handleWriteAppSettings({ cloudSetupDismissed: true }).catch((error) => {
+      console.warn("[cloud] Could not save dismissing Kanna Cloud setup", error)
+    })
+  }, [state.handleWriteAppSettings])
   // Rendered inline rather than through a `useMemo`: `KannaSidebar` is memoized
   // and every prop below is now stable, so React skips it on its own. The memo
   // wrapper used to be defeated anyway — its dep list named the sidebar
@@ -405,6 +413,7 @@ function KannaLayout() {
       editorLabel={state.editorLabel}
       updateSnapshot={state.updateSnapshot}
       onOpenChangelog={handleOpenChangelog}
+      onDismissCloudSetup={handleDismissCloudSetup}
     />
   )
 

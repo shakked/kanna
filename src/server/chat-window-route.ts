@@ -46,7 +46,7 @@ export function readChatWindow(chatId: string, deps: ChatWindowRouteDeps): ChatS
     agent.getChatStatuses?.() ?? agent.getActiveStatuses(),
     agent.getDrainingChatIds(),
     chatId,
-    (id) => store.getClientTranscript(id, windowStart),
+    (id, options) => store.getClientTranscript(id, windowStart, options),
     agent.getSubagents?.(chatId),
     agent.getWaitingOn?.(chatId)
   )

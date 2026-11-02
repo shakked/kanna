@@ -293,7 +293,9 @@ describe("ChatInput phone layout", () => {
     expect(at(html, 'aria-label="Add attachment"')).toBeLessThan(at(html, 'data-slot="harness"'))
     expect(at(html, 'data-slot="harness"')).toBeLessThan(at(html, 'title="Record voice message"'))
     // The harness control names its model in the card.
-    expect(html).toMatch(/Harness and model"[^>]*>.*?<span class="whitespace-nowrap text-foreground">/)
+    expect(html).toContain('<span class="min-w-0 truncate text-foreground">Opus</span>')
+    // Then the effort, faintly, with no separator; it truncates before the model does.
+    expect(html).toMatch(/text-foreground">Opus<\/span><span data-part="effort" class="[^"]*shrink-\[1000\][^"]*text-muted-foreground\/70">High<\/span>/)
     // Nothing left of the one-line layout.
     expect(html).not.toContain("translate-x-8")
     // Empty, the mic is the round button itself: no second mic beside it.
@@ -307,5 +309,69 @@ describe("ChatInput phone layout", () => {
     expect(at(html, 'aria-label="Add attachment"')).toBeLessThan(at(html, 'data-slot="harness"'))
     expect(at(html, 'data-slot="harness"')).toBeLessThan(at(html, 'data-slot="mic"'))
     expect(at(html, 'data-slot="mic"')).toBeLessThan(at(html, 'aria-label="Send message"'))
+  })
+})
+
+describe("ChatInput effort after the model", () => {
+  const render = (chatId: string, provider: "claude" | "cursor", layout: "phone" | "desktop") =>
+    renderToStaticMarkup(createElement(ChatInput, {
+      onSubmit: async () => undefined,
+      disabled: false,
+      activeProvider: provider,
+      availableProviders: PROVIDERS,
+      chatId,
+      layout,
+    }))
+
+  test("follows the effort the menu sets", () => {
+    const store = useChatPreferencesStore.getState()
+    const state = store.getComposerState("effort-1")
+    store.setComposerState("effort-1", { ...state, modelOptions: { ...state.modelOptions, reasoningEffort: "low" } })
+    expect(render("effort-1", "claude", "phone")).toContain('data-part="effort" class="min-w-0 shrink-[1000] truncate text-muted-foreground/70">Low<')
+  })
+
+  test("says nothing for a harness without efforts, or on desktop's one line", () => {
+    const store = useChatPreferencesStore.getState()
+    store.setComposerState("effort-2", { ...store.getComposerState("effort-2"), provider: "cursor", model: "composer-2.5", modelOptions: { fastMode: false } } as never)
+    expect(render("effort-2", "cursor", "phone")).not.toContain('data-part="effort"')
+    expect(render("effort-3", "claude", "desktop")).not.toContain('data-part="effort"')
+  })
+})
+
+describe("ChatInput fast bolt", () => {
+  const render = (chatId: string, layout: "phone" | "desktop", options: Record<string, unknown>, model = "opus", provider: "claude" | "cursor" = "claude") => {
+    const store = useChatPreferencesStore.getState()
+    store.setComposerState(chatId, { ...store.getComposerState(chatId), provider, model, modelOptions: options } as never)
+    return renderToStaticMarkup(createElement(ChatInput, {
+      onSubmit: async () => undefined,
+      disabled: false,
+      activeProvider: provider,
+      availableProviders: PROVIDERS,
+      chatId,
+      layout,
+    }))
+  }
+
+  test("on: a bolt between the model and the effort, named Fast for screen readers", () => {
+    const html = render("fast-on", "phone", { reasoningEffort: "high", fastMode: true })
+    expect(html.indexOf(">Opus</span>")).toBeLessThan(html.indexOf('data-part="fast"'))
+    expect(html.indexOf('data-part="fast"')).toBeLessThan(html.indexOf('data-part="effort"'))
+    // The effort's own muted colour.
+    expect(html).toMatch(/data-part="fast" aria-hidden="true" viewBox="0 0 12 12" fill="currentColor" class="[^"]*text-muted-foreground\/70"/)
+    expect(html).toContain("Opus Fast High")
+    // Solid, with no outline, to match iOS's bolt.fill.
+    expect(html).not.toMatch(/data-part="fast"[^>]*stroke/)
+    // iOS's spacing, as a share of the type: 2px more after the name, 1.5px
+    // less before the effort than the gap gives.
+    expect(html).toMatch(/data-part="fast"[^>]*class="ml-\[2px\] -mr-\[1\.5px\] /)
+  })
+
+  test("off: no bolt", () => {
+    expect(render("fast-off", "phone", { reasoningEffort: "high", fastMode: false })).not.toContain('data-part="fast"')
+  })
+
+  test("no effort to sit beside, or desktop's one line: no bolt", () => {
+    expect(render("fast-cursor", "phone", { fastMode: true }, "composer-2.5", "cursor")).not.toContain('data-part="fast"')
+    expect(render("fast-desktop", "desktop", { reasoningEffort: "high", fastMode: true })).not.toContain('data-part="fast"')
   })
 })

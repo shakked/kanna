@@ -81,6 +81,8 @@ interface AppSettingsFile {
   sidebarUsageEnabled?: unknown
   chatCpuEnabled?: unknown
   usageResetDay?: unknown
+  disablePreconfiguredMcp?: unknown
+  cloudSetupDismissed?: unknown
   newProjectsDirectory?: unknown
   setupShown?: unknown
   setupCompleted?: unknown
@@ -219,6 +221,8 @@ function toFilePayload(state: AppSettingsState) {
     ...(state.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
     ...(state.chatCpuEnabled === true ? { chatCpuEnabled: true } : {}),
     ...(state.usageResetDay !== undefined ? { usageResetDay: state.usageResetDay } : {}),
+    ...(state.disablePreconfiguredMcp === true ? { disablePreconfiguredMcp: true } : {}),
+    ...(state.cloudSetupDismissed === true ? { cloudSetupDismissed: true } : {}),
     newProjectsDirectory: state.newProjectsDirectory,
     setupShown: state.setupShown,
     setupCompleted: state.setupCompleted,
@@ -257,6 +261,8 @@ function toSnapshot(
     ...(state.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
     ...(state.chatCpuEnabled === true ? { chatCpuEnabled: true } : {}),
     ...(state.usageResetDay !== undefined ? { usageResetDay: state.usageResetDay } : {}),
+    ...(state.disablePreconfiguredMcp === true ? { disablePreconfiguredMcp: true } : {}),
+    ...(state.cloudSetupDismissed === true ? { cloudSetupDismissed: true } : {}),
     newProjectsDirectory: state.newProjectsDirectory,
     setupShown: state.setupShown,
     setupCompleted: state.setupCompleted,
@@ -365,6 +371,8 @@ function normalizeAppSettings(
     ...(source?.sidebarUsageEnabled === true ? { sidebarUsageEnabled: true } : {}),
     ...(source?.chatCpuEnabled === true ? { chatCpuEnabled: true } : {}),
     ...(usageResetDay !== DEFAULT_USAGE_RESET_DAY ? { usageResetDay } : {}),
+    ...(source?.disablePreconfiguredMcp === true ? { disablePreconfiguredMcp: true } : {}),
+    ...(source?.cloudSetupDismissed === true ? { cloudSetupDismissed: true } : {}),
     newProjectsDirectory,
     // Onboarding markers default to false so a machine that has never run the
     // wizard still gets it; once set they stay set for every browser.
@@ -414,6 +422,8 @@ function toComparablePayload(source: AppSettingsFile) {
     sidebarUsageEnabled: source.sidebarUsageEnabled,
     chatCpuEnabled: source.chatCpuEnabled,
     usageResetDay: source.usageResetDay,
+    disablePreconfiguredMcp: source.disablePreconfiguredMcp,
+    cloudSetupDismissed: source.cloudSetupDismissed,
     newProjectsDirectory: typeof source.newProjectsDirectory === "string"
       ? source.newProjectsDirectory.trim()
       : source.newProjectsDirectory,

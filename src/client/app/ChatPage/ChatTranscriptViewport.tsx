@@ -57,7 +57,9 @@ import {
   EMPTY_STATE_TEXT,
 } from "./utils"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction, TerminalPreset } from "../../../shared/protocol"
-import type { TranscriptOutlineEntry, WaitingOn } from "../../../shared/types"
+import type { ChatTurnFolds, TranscriptOutlineEntry, WaitingOn } from "../../../shared/types"
+import { setTurnFoldPreference, turnFoldPreferenceKey, useTurnFoldPreferences } from "../../lib/turn-fold-state"
+import { applyTurnFolds, foldHeaderRowId, indexTurnFolds, settleScrollTarget, turnJustFolded } from "../turnFolds"
 /**
  * How close to the bottom counts as "at the end", as a fraction of viewport
  * height.
@@ -139,7 +141,7 @@ function rowLightsItself(row: ResolvedTranscriptRow): boolean {
 
 type TranscriptRowItemProps = Pick<
   ComponentProps<typeof KannaTranscriptRow>,
-  "row" | "toolGroupExpanded" | "onToolGroupExpandedChange" | "onAskUserQuestionSubmit" | "onExitPlanModeConfirm"
+  "row" | "toolGroupExpanded" | "onToolGroupExpandedChange" | "onTurnFoldToggle" | "onAskUserQuestionSubmit" | "onExitPlanModeConfirm"
 > & { flashBox: boolean; flashRow: boolean }
 
 /**
@@ -161,6 +163,7 @@ const TranscriptRowItem = memo(function TranscriptRowItem({
   flashRow,
   toolGroupExpanded,
   onToolGroupExpandedChange,
+  onTurnFoldToggle,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
 }: TranscriptRowItemProps) {
@@ -192,6 +195,7 @@ const TranscriptRowItem = memo(function TranscriptRowItem({
           flash={flashRow}
           toolGroupExpanded={toolGroupExpanded}
           onToolGroupExpandedChange={onToolGroupExpandedChange}
+          onTurnFoldToggle={onTurnFoldToggle}
           onAskUserQuestionSubmit={onAskUserQuestionSubmit}
           onExitPlanModeConfirm={onExitPlanModeConfirm}
         />
@@ -314,6 +318,12 @@ interface ChatTranscriptViewportProps {
   transcriptOutline?: TranscriptOutlineEntry[]
   /** On a fork whose copied history is loaded: where the "Forked from" line goes. */
   forkBoundary?: ForkBoundary | null
+  /**
+   * The finished turns that fold behind a "Worked for" header, as the server
+   * decided them (`ChatSnapshot.turnFolds`). Absent, from a server that does
+   * not fold or in the export viewer, the transcript is drawn whole.
+   */
+  turnFolds?: ChatTurnFolds
   onLoadOlderMessages?: (options?: { untilMessageId?: string; all?: boolean }) => Promise<void>
   isLoadingOlderMessages?: boolean
   /**
@@ -509,6 +519,7 @@ const TranscriptScrollerBody = memo(function TranscriptScrollerBody({
   hasOlderMessages = false,
   transcriptOutline,
   forkBoundary = null,
+  turnFolds,
   onLoadOlderMessages,
   isLoadingOlderMessages = false,
   scrollbarGutterHostRef,
@@ -539,7 +550,17 @@ const TranscriptScrollerBody = memo(function TranscriptScrollerBody({
     latestToolIds,
     forkBoundary,
   }), [forkBoundary, isProcessing, latestToolIds, localPath, messages])
-  const resolvedRows = useStableResolvedRows(rawRows)
+
+  const foldIndex = useMemo(() => indexTurnFolds(messages, turnFolds), [messages, turnFolds])
+  const foldPreferences = useTurnFoldPreferences()
+  // Closed unless the reader opened it. Nothing else opens a fold.
+  const isFoldOpen = useCallback((foldId: string) => (
+    activeChatId ? foldPreferences[turnFoldPreferenceKey(activeChatId, foldId)]?.[0] === 1 : false
+  ), [activeChatId, foldPreferences])
+  const isFoldOpenRef = useRef(isFoldOpen)
+  isFoldOpenRef.current = isFoldOpen
+  const foldedRows = useMemo(() => applyTurnFolds(rawRows, foldIndex, isFoldOpen), [foldIndex, isFoldOpen, rawRows])
+  const resolvedRows = useStableResolvedRows(foldedRows)
 
   useEffect(() => {
     setToolGroupExpanded({})
@@ -550,7 +571,20 @@ const TranscriptScrollerBody = memo(function TranscriptScrollerBody({
     return () => { listRef.current = null }
   }, [listRef, scrollToEnd])
 
-  const rowIndexByMessageId = useMemo(() => buildRowIndexByMessageId(resolvedRows), [resolvedRows])
+  // A message a closed fold hides is found at its fold's header: a stored
+  // read position or a jump inside a closed fold lands there, and the fold
+  // stays closed.
+  const rowIndexByMessageId = useMemo(() => {
+    const map = buildRowIndexByMessageId(resolvedRows)
+    if (foldIndex.foldIdByHiddenMessageId.size === 0) return map
+    const headerIndex = new Map<string, number>()
+    resolvedRows.forEach((row, index) => { if (row.kind === "fold-header") headerIndex.set(row.foldId, index) })
+    for (const [messageId, foldId] of foldIndex.foldIdByHiddenMessageId) {
+      const index = headerIndex.get(foldId)
+      if (!map.has(messageId) && index !== undefined) map.set(messageId, index)
+    }
+    return map
+  }, [foldIndex, resolvedRows])
   const loadedTurns = useMemo(() => buildTranscriptTurns(resolvedRows), [resolvedRows])
   // Turns before the window come from the outline. They have no rows, so
   // they carry no reply or count; they exist so the map reaches the start
@@ -780,9 +814,16 @@ const TranscriptScrollerBody = memo(function TranscriptScrollerBody({
     if (!jumpRequest || handledJumpRequestIdRef.current === jumpRequest.requestId) return null
     handledJumpRequestIdRef.current = jumpRequest.requestId
     onJumpRequestHandled?.(jumpRequest.requestId)
-    const target = resolveJumpTarget(resolvedRows, jumpRequest.target)
+    let target = resolveJumpTarget(resolvedRows, jumpRequest.target)
+    const toolTarget = jumpRequest.target
+    if (!target && typeof toolTarget !== "string") {
+      // A call a closed fold hides: land on the fold's header.
+      const message = messages.find((candidate) => candidate.kind === "tool" && candidate.toolId === toolTarget.toolId)
+      const foldId = message ? foldIndex.foldIdByHiddenMessageId.get(message.id) : undefined
+      if (foldId) target = { kind: "pin", rowId: foldHeaderRowId(foldId) }
+    }
     return target?.kind === "pin" ? prepareJumpToRow(target.rowId) : target
-  }, [jumpRequest, onJumpRequestHandled, prepareJumpToRow, resolvedRows])
+  }, [foldIndex, jumpRequest, messages, onJumpRequestHandled, prepareJumpToRow, resolvedRows])
 
   /**
    * Where the open landed, the jump that sent it there if one did, and
@@ -902,6 +943,89 @@ const TranscriptScrollerBody = memo(function TranscriptScrollerBody({
     if (!shouldPinForNewPrompt(previousPrompt, nextPrompt) || nextPrompt === null) return
     applyScrollTarget({ kind: "end" })
   }, [activeChatId, applyScrollTarget, resolvedRows])
+
+  /**
+   * Where a fold's header sat when it was clicked, to put it back there once
+   * the rows below it have come or gone. Without this the browser's own
+   * scroll anchoring (Chromium's; Safari has none) can keep a row below the
+   * header still instead, and the header the reader just clicked jumps away
+   * from under the pointer.
+   */
+  const foldHoldRef = useRef<{ rowId: string; top: number } | null>(null)
+
+  const handleTurnFoldToggle = useCallback((foldId: string, rowId: string) => {
+    const viewport = viewportRef.current
+    const row = viewport?.querySelector(`[data-message-id="${CSS.escape(rowId)}"]`)
+    if (viewport && row) {
+      foldHoldRef.current = { rowId, top: row.getBoundingClientRect().top - viewport.getBoundingClientRect().top }
+    }
+    hasUserScrolledRef.current = true
+    const open = isFoldOpenRef.current(foldId)
+    if (activeChatId) setTurnFoldPreference(activeChatId, foldId, !open)
+  }, [activeChatId])
+
+  useLayoutEffect(() => {
+    const hold = foldHoldRef.current
+    if (!hold) return
+    foldHoldRef.current = null
+    // A pin, so the scroller treats it as a jump and stops following the end:
+    // opening the last turn at the bottom of the chat would otherwise be
+    // followed straight down past its header.
+    applyScrollTarget({ kind: "pin", rowId: hold.rowId, offsetFromMessage: headerOffsetPx - hold.top })
+  }, [applyScrollTarget, headerOffsetPx, resolvedRows])
+
+  /**
+   * The newest text row as it stood after the last commit: where it sat in
+   * the content, and the scroll position then. When a turn settles, its
+   * work folds away above that text, its reply; this is how far down the
+   * reply was, so it can be put back where the reader saw it.
+   */
+  const latestTextRef = useRef<{ rowId: string; contentTop: number } | null>(null)
+  const lastScrollTopRef = useRef(0)
+  const isAtEndRef = useRef(true)
+  /** The turn in progress as the last commit had it, by chat. */
+  const runningTurnRef = useRef<{ chatId: string | null; id?: string }>({ chatId: activeChatId })
+
+  // A turn that just ended folds closed at once. A reader at the end stays
+  // at the end; anyone else keeps the reply where it was on screen while the
+  // rows above it go. Safari has no scroll anchoring to do that for us, and
+  // Chromium's could pick a row that is about to vanish.
+  useLayoutEffect(() => {
+    const previous = runningTurnRef.current
+    runningTurnRef.current = { chatId: activeChatId, id: turnFolds?.runningTurnId }
+    if (previous.chatId !== activeChatId || !turnJustFolded(previous.id, turnFolds)) return
+    const target = settleScrollTarget({
+      atEnd: isAtEndRef.current,
+      text: latestTextRef.current,
+      scrollTop: lastScrollTopRef.current,
+      rowIds: new Set(resolvedRows.map((row) => row.id)),
+      headerOffsetPx,
+    })
+    if (target) applyScrollTarget(target)
+  }, [activeChatId, applyScrollTarget, headerOffsetPx, resolvedRows, turnFolds])
+
+  // After the settle above has read it: where the newest text row is now.
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current
+    let rowId: string | null = null
+    for (let index = resolvedRows.length - 1; index >= 0; index -= 1) {
+      const row = resolvedRows[index]!
+      if (row.kind === "single" && row.message.kind === "assistant_text") {
+        rowId = row.id
+        break
+      }
+    }
+    const element = rowId ? viewport?.querySelector(`[data-message-id="${CSS.escape(rowId)}"]`) : null
+    if (!viewport || !rowId || !element) {
+      latestTextRef.current = null
+      return
+    }
+    lastScrollTopRef.current = viewport.scrollTop
+    latestTextRef.current = {
+      rowId,
+      contentTop: element.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop,
+    }
+  }, [resolvedRows])
 
   const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
     setToolGroupExpanded((current) => (
@@ -1037,6 +1161,8 @@ const TranscriptScrollerBody = memo(function TranscriptScrollerBody({
     if (!scrollNode) return
     const distanceFromEnd = scrollNode.scrollHeight - scrollNode.clientHeight - scrollNode.scrollTop
     const isAtEnd = distanceFromEnd <= AT_END_THRESHOLD_PX
+    isAtEndRef.current = isAtEnd
+    lastScrollTopRef.current = scrollNode.scrollTop
     onIsAtEndChange(isAtEnd)
     reportTopVisibleMessage(isAtEnd)
     setTranscriptOverflows(scrollNode.scrollHeight - scrollNode.clientHeight > OVERFLOW_EPSILON_PX)
@@ -1215,6 +1341,8 @@ const TranscriptScrollerBody = memo(function TranscriptScrollerBody({
     [hasOlderMessages, messages, parentChatId],
   )
 
+  const workingSince = runtimeStatus === "running" ? turnFolds?.workingSince ?? null : null
+
   const listHeader = (
     <div style={{ paddingTop: `${headerOffsetPx}px` }}>
       {parentChatId && showsParentLink ? (
@@ -1256,7 +1384,7 @@ const TranscriptScrollerBody = memo(function TranscriptScrollerBody({
           it is not processing. It is not finished either, and this line is
           what says so here. A draining stream says it with its own, below. */}
       {isProcessing || (runtimeStatus === "waiting_on_subagent" && !isDraining)
-        ? <ProcessingMessage status={runtimeStatus ?? undefined} waitingOn={waitingOn} />
+        ? <ProcessingMessage status={runtimeStatus ?? undefined} waitingOn={waitingOn} workingSince={workingSince} />
         : null}
       {queuePaused && queuedMessages.length > 0 ? (
         <QueuePausedNotice onResume={() => onSteerQueuedMessage(queuedMessages[0]!.id)} />
@@ -1302,6 +1430,7 @@ const TranscriptScrollerBody = memo(function TranscriptScrollerBody({
                   flashRow={flashRowId === row.id && rowLightsItself(row)}
                   toolGroupExpanded={row.kind === "tool-group" ? (toolGroupExpanded[row.id] ?? false) : undefined}
                   onToolGroupExpandedChange={handleToolGroupExpandedChange}
+                  onTurnFoldToggle={handleTurnFoldToggle}
                   onAskUserQuestionSubmit={onAskUserQuestionSubmit}
                   onExitPlanModeConfirm={onExitPlanModeConfirm}
                 />

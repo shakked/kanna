@@ -1,4 +1,4 @@
-import { BookText, Command, FlaskConical, Gauge, KeyRound, LaptopMinimal, MessageSquareQuote, ScrollText, Settings2, type LucideIcon } from "lucide-react"
+import { BookText, Cloud, Command, FlaskConical, Gauge, KeyRound, LaptopMinimal, MessageSquareQuote, ScrollText, Settings2, type LucideIcon } from "lucide-react"
 import { macSetupAvailable } from "../../lib/macApp"
 
 /**
@@ -47,6 +47,12 @@ export const SETTINGS_SECTIONS = [
     label: "Keybindings",
     icon: Command as LucideIcon,
     subtitle: "Edit global app shortcuts stored in the active keybindings file.",
+  },
+  {
+    id: "cloud",
+    label: "Kanna Cloud",
+    icon: Cloud as LucideIcon,
+    subtitle: "Use this machine from anywhere with a personal URL.",
   },
   {
     id: "usage",
@@ -172,6 +178,12 @@ export const SETTINGS_ROWS = defineRows({
     description: "Delegators weigh each provider's remaining plan usage and time to reset when choosing a provider, model and effort for sub-chats. Only affects delegator chats.",
     keywords: ["token saver", "tokens", "efficiency", "budget", "usage", "plan", "limits", "route", "model", "conserve", "spend", "delegator"],
   },
+  disablePreconfiguredMcp: {
+    sectionId: "general",
+    title: "Disable Pre-configured MCP Servers",
+    description: "Claude and Codex start without the MCP servers you set up outside Kanna: config files, plugins, claude.ai connectors and Codex apps. Kanna's own tools stay available. Applies to new turns. Cursor and Grok always load theirs.",
+    keywords: ["mcp", "mcp servers", "connectors", "claude.ai", "plugins", "tools", "strict", "mcp.json", "config.toml", "codex", "claude"],
+  },
   submitWhileRunning: {
     sectionId: "general",
     title: "Enter While Running",
@@ -223,6 +235,14 @@ export const SETTINGS_ROWS = defineRows({
     title: "Anonymous Analytics",
     description: "Help improve Kanna with anonymous product analytics.",
     keywords: ["telemetry", "privacy", "tracking"],
+  },
+
+  // Kanna Cloud
+  cloudPairing: {
+    sectionId: "cloud",
+    title: "Kanna Cloud",
+    description: "Use this machine from anywhere with a personal URL.",
+    keywords: ["cloud", "pair", "pairing", "remote", "url", "link", "fleet", "setup", "connect"],
   },
 
   // Providers

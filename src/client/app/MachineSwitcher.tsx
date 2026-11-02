@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ChevronsUpDown, Cloud, ExternalLink, LaptopMinimal, Loader2, Settings2 } from "lucide-react"
+import { ChevronsUpDown, Cloud, ExternalLink, LaptopMinimal, Loader2, Settings2, X } from "lucide-react"
 import {
   Dialog,
   DialogBody,
@@ -8,9 +8,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog"
+import { Button } from "../components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip"
 import { CloudPairPanel } from "../components/cloud/CloudPairPanel"
 import { useCloudPairSession } from "../components/cloud/useCloudPairSession"
 import { InputPopover, PopoverMenuItem } from "../components/chat-ui/ChatPreferenceControls"
+import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { findCurrentMachine, useConnectionStore } from "../stores/connectionStore"
 import { displayClaimUrl } from "../lib/pairSession"
 import { postToMacApp } from "../lib/macApp"
@@ -61,13 +64,14 @@ function OnlineDot({ online }: { online: boolean }) {
  * Mac the app does the switching (this Mac at localhost, the rest at
  * kanna.sh).
  */
-export function MachineSwitcher() {
+export function MachineSwitcher({ onDismissCloudSetup }: { onDismissCloudSetup: () => void }) {
   const mode = useConnectionStore((state) => state.mode)
   const machines = useConnectionStore((state) => state.machines)
   const load = useConnectionStore((state) => state.load)
   const fromMacApp = useConnectionStore((state) => state.fromMacApp)
   const thisMachineSubdomain = useConnectionStore((state) => state.thisMachine)
   const showingMachine = useConnectionStore((state) => state.showingMachine)
+  const cloudSetupDismissed = useAppSettingsStore((state) => state.settings?.cloudSetupDismissed === true)
   const [pairDialogOpen, setPairDialogOpen] = useState(false)
   const { session, starting, begin } = useCloudPairSession({ enabled: mode === "local" })
   const startedRef = useRef(false)
@@ -114,6 +118,8 @@ export function MachineSwitcher() {
 
   if (mode === "local") {
     const pairedOrigin = session.status === "paired" ? session.appOrigin : null
+    // Only the setup prompt can be hidden; a paired machine keeps its link.
+    if (!pairedOrigin && cloudSetupDismissed) return null
     return (
       <MachineSection>
         {pairedOrigin ? (
@@ -125,13 +131,40 @@ export function MachineSwitcher() {
             <ExternalLink className="size-3.5 shrink-0 opacity-60" />
           </a>
         ) : (
-          <button type="button" onClick={() => setPairDialogOpen(true)} className={SIDEBAR_BUTTON_CLASS}>
-            <span className="flex min-w-0 items-center gap-2">
-              <Cloud className="ml-[1px] size-4 shrink-0" />
-              <span className="truncate text-xs font-medium">Setup Kanna Cloud</span>
-            </span>
-            <ExternalLink className="size-3.5 shrink-0 opacity-60" />
-          </button>
+          // The dismiss X takes the link icon's place, drawn like the sidebar
+          // section headers' hover buttons. Where a pointer hovers it shows
+          // only while the row is hovered or has keyboard focus. A touch
+          // screen has no hover, so there it is always shown, and under a
+          // finger its target grows to 44px wide and the section's full height.
+          <div className="group/cloud-setup relative">
+            <button type="button" onClick={() => setPairDialogOpen(true)} className={SIDEBAR_BUTTON_CLASS}>
+              <span className="flex min-w-0 items-center gap-2">
+                <Cloud className="ml-[1px] size-4 shrink-0" />
+                <span className="truncate text-xs font-medium">Setup Kanna Cloud</span>
+              </span>
+              <ExternalLink className="size-3.5 shrink-0 opacity-60 transition-opacity duration-150 [@media(hover:none)]:invisible [@media(hover:hover)]:group-hover/cloud-setup:opacity-0 group-has-[:focus-visible]/cloud-setup:opacity-0" />
+            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onDismissCloudSetup}
+                  aria-label="Dismiss Kanna Cloud setup"
+                  className={cn(
+                    "absolute right-1.5 top-1/2 h-5.5 w-5.5 -translate-y-1/2 !rounded",
+                    "duration-150 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/cloud-setup:opacity-100 [@media(hover:hover)]:group-has-[:focus-visible]/cloud-setup:opacity-100",
+                    "pointer-coarse:before:absolute pointer-coarse:before:-inset-x-[11px] pointer-coarse:before:-inset-y-[7px] pointer-coarse:before:content-['']",
+                  )}
+                >
+                  <X className="size-3.5 text-slate-500 dark:text-slate-400" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={4}>
+                Dismiss
+              </TooltipContent>
+            </Tooltip>
+          </div>
         )}
         <Dialog open={pairDialogOpen} onOpenChange={setPairDialogOpen}>
           <DialogContent>

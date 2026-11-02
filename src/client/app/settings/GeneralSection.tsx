@@ -322,6 +322,15 @@ export function GeneralSection({
     }
   }
 
+  async function handleDisablePreconfiguredMcpChange(enabled: boolean) {
+    try {
+      setAppSettingsError(null)
+      await handleWriteAppSettings({ disablePreconfiguredMcp: enabled })
+    } catch (error) {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save chat settings.")
+    }
+  }
+
   async function handleChatTabsChange(enabled: boolean) {
     try {
       setAppSettingsError(null)
@@ -539,6 +548,15 @@ export function GeneralSection({
                 void handleTokenSaverChange(checked)
               }}
               aria-label={SETTINGS_ROWS.tokenSaver.title}
+            />
+          </SettingsRow>
+          <SettingsRow def={SETTINGS_ROWS.disablePreconfiguredMcp}>
+            <Switch
+              checked={appSettings?.disablePreconfiguredMcp === true}
+              onCheckedChange={(checked) => {
+                void handleDisablePreconfiguredMcpChange(checked)
+              }}
+              aria-label={SETTINGS_ROWS.disablePreconfiguredMcp.title}
             />
           </SettingsRow>
           <SettingsRow def={SETTINGS_ROWS.submitWhileRunning}>

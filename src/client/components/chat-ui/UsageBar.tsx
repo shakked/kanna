@@ -52,20 +52,24 @@ function useMinuteTick() {
   }, [])
 }
 
-const GRID_CLASS = "grid min-w-0 flex-1 items-center overflow-hidden gap-x-1.5 text-left text-[9px] font-medium leading-[9px]"
-const COLUMNS = "grid-cols-[auto_minmax(24px,1fr)_auto_auto]"
-// A lone spend-cap row with no known reset has nothing to lead with, so no
-// first column either.
-const UNLABELED_COLUMNS = "grid-cols-[minmax(24px,1fr)_auto_auto]"
+/**
+ * The columns every `UsageBar` in a stack shares, set on their common parent:
+ * icon, lead, meter, percent, tail. Each bar is a subgrid of it, so the text
+ * columns are as wide as the widest cell in any provider's rows and every
+ * meter, Claude's and Codex's alike, is the same length. The percent and tail
+ * columns hold room for "100%" and "23h 59m", so the meters don't change
+ * length as countdowns tick.
+ */
+export const USAGE_STACK_CLASS = "grid grid-cols-[auto_auto_minmax(24px,1fr)_minmax(4ch,auto)_minmax(7ch,auto)] gap-x-1.5 text-[9px] font-medium leading-[9px]"
 
-function UsageRows({ rows, labeled }: { rows: ComposerUsageRow[]; labeled: boolean }) {
+function UsageRows({ rows }: { rows: ComposerUsageRow[] }) {
   return rows.map((row) => {
     const { window } = row
     const usedPercent = Math.max(0, Math.min(100, window.usedPercent ?? 0))
     return (
       <Fragment key={window.id}>
-        {/* Kept (empty) beside labelled rows, so the columns line up. */}
-        {labeled ? <span className="whitespace-nowrap tabular-nums">{rowLead(row)}</span> : null}
+        {/* Empty for a spend cap with no known reset, so the columns line up. */}
+        <span className="col-start-2 whitespace-nowrap tabular-nums">{rowLead(row)}</span>
         <span className="h-[3px] overflow-hidden rounded-full bg-muted-foreground/20" aria-hidden="true">
           <span
             className={cn("block h-full rounded-full transition-[width] duration-500 ease-out", fillColorClass(usedPercent, row.credits?.limitReached === true))}
@@ -82,8 +86,9 @@ function UsageRows({ rows, labeled }: { rows: ComposerUsageRow[]; labeled: boole
 /**
  * One provider's plan usage: a thin meter per window that limits it, shortest
  * first ("5h ▬▬ 42% 2h 14m" over "Wk ▬ 18% 3d 4h"), or a lone spend-cap row
- * ("8d ▬▬ 4% $956 left"), in 9px type, after the provider's icon. Full names
- * on hover; opens the command palette's Usage page.
+ * ("8d ▬▬ 4% $956 left"), in 9px type, after the provider's icon. Lays out on
+ * its parent's `USAGE_STACK_CLASS` columns. Full names on hover; opens the
+ * command palette's Usage page.
  */
 export function UsageBar({
   rows: rawRows,
@@ -100,7 +105,6 @@ export function UsageBar({
   useMinuteTick()
   // Re-read each minute, so a window that resets mid-session drops to 0%.
   const rows = rawRows.map((row) => ({ ...row, window: windowAsOf(row.window) }))
-  const labeled = rows.some((row) => rowLead(row) !== "")
   const summary = rows.map((row) => {
     const tail = rowTail(row)
     const suffix = tail ? (row.credits ? `, ${tail}` : `, resets in ${tail}`) : ""
@@ -115,14 +119,18 @@ export function UsageBar({
           onClick={() => openCommandPalette("usage")}
           aria-label={`${title} plan usage: ${summary}. Open usage`}
           className={cn(
-            "flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "col-span-full grid min-w-0 cursor-pointer grid-cols-subgrid items-center gap-y-1 overflow-hidden rounded-md px-1 py-0.5 text-left text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             className,
           )}
         >
-          {icon ? <span className="flex size-3.5 shrink-0 items-center justify-center [&>svg]:size-3.5" aria-hidden="true">{icon}</span> : null}
-          <span className={cn(GRID_CLASS, labeled ? COLUMNS : UNLABELED_COLUMNS, "gap-y-1")}>
-            <UsageRows rows={rows} labeled={labeled} />
+          <span
+            className="col-start-1 mr-0.5 flex size-3.5 items-center justify-center [&>svg]:size-3.5"
+            style={{ gridRow: `1 / span ${rows.length}` }}
+            aria-hidden="true"
+          >
+            {icon}
           </span>
+          <UsageRows rows={rows} />
         </button>
       </TooltipTrigger>
       <TooltipContent side="top" align="start" className="w-max max-w-none px-3 py-2">

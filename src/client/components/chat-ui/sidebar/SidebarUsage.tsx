@@ -5,7 +5,8 @@ import { useAppSettingsStore } from "../../../stores/appSettingsStore"
 import type { KannaSocket } from "../../../app/socket"
 import type { AgentProvider } from "../../../../shared/types"
 import { PROVIDER_ICONS } from "../../provider-icons"
-import { UsageBar } from "../UsageBar"
+import { cn } from "../../../lib/utils"
+import { USAGE_STACK_CLASS, UsageBar } from "../UsageBar"
 
 /** Short block titles; the catalog labels ("Claude Code") are too wide here. */
 const USAGE_TITLES: Record<AgentProvider, string> = {
@@ -38,7 +39,7 @@ export function SidebarUsage({ socket }: { socket: KannaSocket }) {
   if (blocks.length === 0) return null
 
   return (
-    <div className="flex flex-col gap-1.5 border-t border-border py-2 pl-2.5 pr-[7px]">
+    <div className={cn(USAGE_STACK_CLASS, "gap-y-1.5 border-t border-border py-2 pl-2.5 pr-[7px]")}>
       {blocks.map(({ provider, title, rows }) => {
         const Icon = PROVIDER_ICONS[provider]
         return <UsageBar key={provider} rows={rows} title={title} icon={<Icon />} />

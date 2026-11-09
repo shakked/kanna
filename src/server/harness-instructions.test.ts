@@ -5,7 +5,7 @@ import { buildKannaSystemInstructions, buildKannaSystemMessage, buildKannaToolCl
 import { kannaCliCommand } from "./secrets"
 import { KANNA_TOOL_DESCRIPTION_LIMIT, KANNA_TOOL_NAMES, kannaToolSpecs } from "./kanna-tools"
 import { SHOW_VISUALIZATION_TOOL } from "./kanna-visualization-tool"
-import { KANNA_VISUALIZATION_CONTRACT, KANNA_VISUALIZATION_SKILL_INSTRUCTIONS } from "./visualization-instructions"
+import { KANNA_VISUALIZATION_CONTRACT, KANNA_VISUALIZATION_SKILL_INSTRUCTIONS, VISUALIZATION_DESIGN_WIDTH } from "./visualization-instructions"
 import { VISUALIZATION_EXPAND_BUTTON, VISUALIZATION_MAX_HEIGHT } from "../shared/visualization"
 
 const AGENT_ID = "claude/claude-opus-5"
@@ -47,7 +47,10 @@ describe("buildKannaSystemInstructions", () => {
     // The tool requires the choice, so the instructions say what each side means.
     expect(KANNA_ORCHESTRATION_INSTRUCTIONS).toContain("`create_chat` needs a choice of `delegator: false` for a chat that does the work itself")
     expect(KANNA_ORCHESTRATION_INSTRUCTIONS).toContain("`delegator: true` for one that coordinates sub-chats of its own")
-    expect(KANNA_ORCHESTRATION_INSTRUCTIONS).toContain("So does `set_schedule` with `newChat`.")
+    expect(KANNA_ORCHESTRATION_INSTRUCTIONS).toContain("So does `set_schedule` with `newChat: true`.")
+    // set_schedule requires where the runs go, and one existing chat is the usual answer.
+    expect(KANNA_ORCHESTRATION_INSTRUCTIONS).toContain("A new schedule needs `newChat`: `newChat: false` sends every run to one existing chat")
+    expect(KANNA_ORCHESTRATION_INSTRUCTIONS).toContain("`newChat: true` starts a new chat on each run, only for runs that are each independent")
     expect(KANNA_ORCHESTRATION_INSTRUCTIONS).not.toMatch(/ticket|checkpoint/i)
   })
 
@@ -73,8 +76,9 @@ describe("buildKannaSystemInstructions", () => {
     expect(told).toContain("Several unrelated tasks in one message go to several chats.")
     expect(told).toContain("Tell the user which chat each task went to, and link it.")
     expect(told).toContain("Do not redo")
-    expect(told).toContain("Almost always give each automation its own chat: a sub-chat from `create_chat`")
-    expect(told).toContain("with `set_schedule`'s `chatId` pointed at it")
+    expect(told).toContain("Almost always give each automation its own chat that every run reuses: a sub-chat from `create_chat`")
+    expect(told).toContain("with `set_schedule`'s `newChat: false` and `chatId` pointed at it")
+    expect(told).toContain("`newChat: true` (also needs `delegator:`) is only for independent runs;")
     expect(told).toContain("Schedule into this chat only if the user asks")
     const named = [...told.matchAll(/`([a-z_]+)`/g)].map((match) => match[1]!)
     expect(named).toEqual(expect.arrayContaining(["create_chat", "fork_chat", "send_message", "list_chats", "get_context"]))
@@ -239,6 +243,27 @@ test("what holds for every kind is in the description and the session instructio
   const examples = [...KANNA_VISUALIZATION_CONTRACT.matchAll(/<div class="kanna-segmented"[^>]*>(.*?)<\/div>/g)]
   expect(examples.length).toBeGreaterThanOrEqual(2)
   for (const [, options] of examples) expect(options!.match(/<button/g)!.length).toBe(3)
+})
+
+// Told to "use the available width", agents built dashboards for a wide
+// window, and they overflowed the transcript's column.
+test("a visualization is designed for the chat column, not a wide window, in both places", () => {
+  const instructions = buildKannaSystemInstructions(AGENT_ID)
+  const description = SHOW_VISUALIZATION_TOOL.description
+  const widest = `${VISUALIZATION_DESIGN_WIDTH}px`
+  expect(VISUALIZATION_DESIGN_WIDTH).toBe(700)
+  for (const text of [instructions, description]) {
+    expect(text).toContain("never full screen")
+    expect(text).toMatch(new RegExp(`design for ${widest}`, "i"))
+    expect(text).toContain("320px")
+    expect(text).toMatch(/2 columns at most|at most two columns/)
+    expect(text).toMatch(/scrolls (sideways )?in(side)? its own box/)
+    expect(text).not.toContain("available width")
+  }
+  // First in what holds for every kind, before anything about markup.
+  expect(KANNA_VISUALIZATION_CONTRACT.indexOf(`at most about ${widest} wide`)).toBeLessThan(KANNA_VISUALIZATION_CONTRACT.indexOf("Author self-contained HTML"))
+  expect(description.indexOf("never full screen")).toBeLessThan(description.indexOf("One subject per visualization"))
+  expect(instructions).toContain("the page itself never overflows or scrolls sideways")
 })
 
 // Claude Code cuts an MCP tool's description at this length and ends it

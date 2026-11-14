@@ -16,6 +16,7 @@ import {
   Folder,
   FolderInput,
   FolderOpen,
+  FolderSearch,
   Gauge,
   GitBranch,
   GitFork,
@@ -201,7 +202,8 @@ const MODE_COMMAND_KEYWORDS: Record<ChatMode, string[]> = {
 const ADD_PROJECT_STATIC_ACTIONS = [
   { id: "clone-github", title: "Clone from GitHub…", keywords: ["repo", "git", "clone", "checkout"] },
   { id: "create-new", title: "Create New…", keywords: ["blank", "empty", "init", "new project", "start"] },
-  { id: "choose-existing", title: "Choose Existing…", keywords: ["browse", "folder", "open", "filesystem", "directory", "path"] },
+  { id: "choose-existing", title: "Choose Existing…", keywords: ["folder", "open", "filesystem", "directory", "finder", "import"] },
+  { id: "browse-in-kanna", title: "Browse in Kanna…", keywords: ["browse", "folder", "path", "type path", "directory", "existing"] },
 ] as const
 
 type AddProjectStaticActionId = (typeof ADD_PROJECT_STATIC_ACTIONS)[number]["id"]
@@ -693,7 +695,7 @@ export function CommandPalette({ state }: { state: KannaState }) {
       run: () => pushPage({ page: "add-project" }),
     })
 
-    // The three Add Project sub-actions are also directly searchable from the
+    // The Add Project sub-actions are also directly searchable from the
     // root (surfaced only while typing, so the empty root list stays curated)
     // — no need to step through "Add Project…" to reach Clone / Create / Add
     // Existing. Titles are spelled out ("… Project") for standalone clarity.
@@ -720,6 +722,14 @@ export function CommandPalette({ state }: { state: KannaState }) {
       icon: <FolderInput className={ICON_CLASS} />,
       searchOnly: true,
       run: () => { void chooseExistingFolder() },
+    })
+    list.push({
+      id: "add-project-browse-in-kanna",
+      title: "Browse in Kanna…",
+      keywords: ["browse", "folder", "path", "type path", "directory", "existing", "add project"],
+      icon: <FolderSearch className={ICON_CLASS} />,
+      searchOnly: true,
+      run: () => pushPage({ page: "browse" }),
     })
 
     list.push({
@@ -2151,6 +2161,7 @@ export function CommandPalette({ state }: { state: KannaState }) {
                         const id: AddProjectStaticActionId = action.id
                         if (id === "clone-github") pushPage({ page: "clone-github" })
                         else if (id === "create-new") pushPage({ page: "create-new" })
+                        else if (id === "browse-in-kanna") pushPage({ page: "browse" })
                         else void chooseExistingFolder()
                       }}
                     >
@@ -2158,7 +2169,9 @@ export function CommandPalette({ state }: { state: KannaState }) {
                         ? <GitBranch className={ICON_CLASS} />
                         : action.id === "create-new"
                           ? <Plus className={ICON_CLASS} />
-                          : <FolderInput className={ICON_CLASS} />}
+                          : action.id === "browse-in-kanna"
+                            ? <FolderSearch className={ICON_CLASS} />
+                            : <FolderInput className={ICON_CLASS} />}
                       <span>{action.title}</span>
                     </CommandItem>
                   ))}

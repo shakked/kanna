@@ -1,5 +1,5 @@
 import { forwardRef, useMemo, useRef, useState, type ComponentPropsWithoutRef, type ComponentType, type ReactNode } from "react"
-import { Building2, Check, Download, Folder, LaptopMinimal, Layers, ListFilter, Loader2, Lock, Plus, Search, SquarePen, User, Users, X } from "lucide-react"
+import { Building2, Check, Download, Folder, FolderInput, LaptopMinimal, Layers, ListFilter, Loader2, Lock, Search, SquarePen, User, Users, X } from "lucide-react"
 import type { LocalProjectSummary } from "../../../shared/types"
 import type { KannaSocket } from "../../app/socket"
 import type { ProjectRequest } from "../../app/kannaStateHelpers"
@@ -411,7 +411,7 @@ export function ProjectsHome({
             />
           ) : null}
           <AccessoryButton label="Add project" onClick={() => openCommandPalette("add-project")}>
-            <Plus className="size-4" />
+            <FolderInput className="size-4" />
           </AccessoryButton>
         </div>
 

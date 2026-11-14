@@ -19,6 +19,7 @@ import { killLocalHttpServer, listLocalHttpServers } from "./local-http-servers"
 import type { PortTunnelManager } from "./port-tunnels"
 import { cloneRepository, createDirectory, ensureProjectDirectory, initializeProjectDirectory, listDirectory, resolveClonePath, resolveLocalPath } from "./paths"
 import { listRecentGitHubRepos } from "./github"
+import { chooseDirectoryNatively } from "./native-folder-picker"
 import { SERVER_PROVIDERS, applyPiFaveModels } from "./provider-catalog"
 import { readProjectQuickActions, writeProjectQuickActions } from "./project-quick-actions"
 import { buildSecretsList } from "./secrets"
@@ -1364,6 +1365,11 @@ export function createWsRouter({
         }
         case "fs.mkdir": {
           const result = await createDirectory(command.path)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          return
+        }
+        case "fs.chooseDirectory": {
+          const result = await chooseDirectoryNatively({ prompt: command.prompt, defaultPath: command.defaultPath })
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
           return
         }

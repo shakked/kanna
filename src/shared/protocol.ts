@@ -157,6 +157,7 @@ export type ClientCommand =
   | { type: "system.ping" }
   | { type: "fs.list"; path?: string; nearest?: boolean }
   | { type: "fs.mkdir"; path: string }
+  | { type: "fs.chooseDirectory"; prompt?: string; defaultPath?: string }
   | { type: "browser.listLocalHttpServers"; projectId?: string }
   | { type: "browser.killLocalHttpServer"; port: number }
   | { type: "browser.exposeLocalHttpServer"; port: number }

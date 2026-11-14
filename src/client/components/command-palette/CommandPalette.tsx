@@ -14,6 +14,7 @@ import {
   EyeOff,
   File,
   Folder,
+  FolderInput,
   FolderOpen,
   Gauge,
   GitBranch,
@@ -40,7 +41,7 @@ import {
   SquareTerminal,
   Terminal,
 } from "lucide-react"
-import type { ChatMode, FsListResult, GitHubRecentReposResult, SidebarData } from "../../../shared/types"
+import type { ChatMode, FsChooseDirectoryResult, FsListResult, GitHubRecentReposResult, SidebarData } from "../../../shared/types"
 import { DEFAULT_NEW_PROJECTS_DIRECTORY } from "../../../shared/types"
 import { REQUEST_ATTACH_FILES_EVENT } from "../../app/chatFocusPolicy"
 import type { KannaState } from "../../app/useKannaState"
@@ -234,6 +235,16 @@ const SIDEBAR_VIEW_COMMANDS: { view: SidebarView; title: string; icon: typeof Fo
   { view: "channels", title: "Show Channels", icon: Hash, keywords: ["channels view", "channel"] },
   { view: "archived", title: "Show Archived", icon: Archive, keywords: ["archived chats", "archive", "old chats"] },
 ]
+
+/**
+ * Whether this page is served from the Mac it runs on, so a dialog the
+ * server opens appears in front of this user. A tunnel, LAN address or
+ * another Mac's server has a non-loopback host.
+ */
+function isSameMachineAsServer() {
+  const host = window.location.hostname.replace(/^\[|\]$/g, "").toLowerCase()
+  return host === "localhost" || host.endsWith(".localhost") || host === "::1" || /^127\./.test(host)
+}
 
 /** Truncates from the head so the most specific path segments stay visible. */
 export function truncatePathHead(path: string, maxLength = 40) {
@@ -457,6 +468,40 @@ export function CommandPalette({ state }: { state: KannaState }) {
     }
   }, [close, pendingActionValue, state.handleCreateProject])
 
+  /**
+   * "Choose Existing…": the server Mac's native folder dialog when this page
+   * is on that Mac (loopback host), the in-app browser otherwise — and also
+   * when the server says it can't (not macOS) or the dialog fails.
+   */
+  const nativeFolderPickerUnavailableRef = useRef(false)
+  const chooseExistingFolder = useCallback(async () => {
+    if (nativeFolderPickerUnavailableRef.current || !isSameMachineAsServer()) {
+      pushPage({ page: "browse" })
+      return
+    }
+    setActionError(null)
+    let result: FsChooseDirectoryResult
+    try {
+      result = await state.socket.command<FsChooseDirectoryResult>({ type: "fs.chooseDirectory", prompt: "Choose a project folder" })
+    } catch (error) {
+      console.warn("[kanna] native folder dialog failed, using the in-app browser", error)
+      nativeFolderPickerUnavailableRef.current = true
+      pushPage({ page: "browse" })
+      return
+    }
+    if (!result.supported) {
+      nativeFolderPickerUnavailableRef.current = true
+      pushPage({ page: "browse" })
+      return
+    }
+    if (!result.path) return
+    await runProjectAction("native-folder-picker", {
+      mode: "existing",
+      localPath: result.path,
+      title: getPathBasename(result.path),
+    })
+  }, [pushPage, runProjectAction, state.socket])
+
   /** Clone into the configured new-projects directory, locking the palette while it runs. */
   const runClone = useCallback(async (repo: RepoRef) => {
     const destination = resolveCloneDestination(newProjectsDir, repo)
@@ -672,9 +717,9 @@ export function CommandPalette({ state }: { state: KannaState }) {
       id: "add-project-choose-existing",
       title: "Add Existing Project…",
       keywords: ["browse", "folder", "open", "filesystem", "directory", "path", "existing", "add project"],
-      icon: <Folder className={ICON_CLASS} />,
+      icon: <FolderInput className={ICON_CLASS} />,
       searchOnly: true,
-      run: () => pushPage({ page: "browse" }),
+      run: () => { void chooseExistingFolder() },
     })
 
     list.push({
@@ -1099,6 +1144,7 @@ export function CommandPalette({ state }: { state: KannaState }) {
 
     return list
   }, [
+    chooseExistingFolder,
     close,
     composer,
     currentChatGroup,
@@ -2105,14 +2151,14 @@ export function CommandPalette({ state }: { state: KannaState }) {
                         const id: AddProjectStaticActionId = action.id
                         if (id === "clone-github") pushPage({ page: "clone-github" })
                         else if (id === "create-new") pushPage({ page: "create-new" })
-                        else pushPage({ page: "browse" })
+                        else void chooseExistingFolder()
                       }}
                     >
                       {action.id === "clone-github"
                         ? <GitBranch className={ICON_CLASS} />
                         : action.id === "create-new"
                           ? <Plus className={ICON_CLASS} />
-                          : <Folder className={ICON_CLASS} />}
+                          : <FolderInput className={ICON_CLASS} />}
                       <span>{action.title}</span>
                     </CommandItem>
                   ))}

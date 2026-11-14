@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes, type CSSProperties } from "react"
-import { ArrowLeft, ArrowRight, ChevronLeft, Flower, House, Loader2, PanelLeft, Search, Plus, Settings, Settings2, SquarePen, Terminal } from "lucide-react"
+import { ArrowLeft, ArrowRight, ChevronLeft, Flower, FolderInput, House, Loader2, PanelLeft, Search, Plus, Settings, Settings2, SquarePen, Terminal } from "lucide-react"
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom"
 import { OPEN_LAYER_SELECTOR, useEdgePeek } from "./useEdgePeek"
 import { APP_NAME } from "../../shared/branding"
@@ -1137,7 +1137,7 @@ function KannaSidebarImpl({
                 className="hidden md:inline-flex h-10 w-auto rounded-lg px-1.5 pl-2 hover:!border-border/0 hover:!bg-transparent mac-app:md:h-8"
                 title="Add project"
               >
-                <Plus className="size-4" />
+                <FolderInput className="size-4" />
               </Button>
             ) : null}
             <Button

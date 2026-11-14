@@ -1339,6 +1339,14 @@ export interface FsListResult {
   missingSuffix?: string
 }
 
+/** `fs.chooseDirectory`: the server Mac's native folder dialog. */
+export interface FsChooseDirectoryResult {
+  /** False when the server can't show one (not macOS); use the in-app browser. */
+  supported: boolean
+  /** The chosen folder, or null when the user cancelled. */
+  path: string | null
+}
+
 /** Default for `newProjectsDirectory` — expanded server-side at use time. */
 export const DEFAULT_NEW_PROJECTS_DIRECTORY = "~/Kanna"
 

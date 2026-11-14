@@ -482,12 +482,29 @@ export function CommandPalette({ state }: { state: KannaState }) {
       return
     }
     setActionError(null)
+    // The dialog itself can stay open as long as the user likes, so it has
+    // no timeout. A quick probe first catches a server that can't answer
+    // (an older one still running while this newer client loaded from disk).
+    try {
+      const probe = await Promise.race([
+        state.socket.command<FsChooseDirectoryResult>({ type: "fs.chooseDirectory", probe: true }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("no answer within 3s")), 3_000)),
+      ])
+      if (!probe.supported) {
+        nativeFolderPickerUnavailableRef.current = true
+        pushPage({ page: "browse" })
+        return
+      }
+    } catch (error) {
+      console.warn("[kanna] native folder dialog unavailable on this server, using the in-app browser", error)
+      pushPage({ page: "browse" })
+      return
+    }
     let result: FsChooseDirectoryResult
     try {
       result = await state.socket.command<FsChooseDirectoryResult>({ type: "fs.chooseDirectory", prompt: "Choose a project folder" })
     } catch (error) {
       console.warn("[kanna] native folder dialog failed, using the in-app browser", error)
-      nativeFolderPickerUnavailableRef.current = true
       pushPage({ page: "browse" })
       return
     }

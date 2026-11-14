@@ -1369,7 +1369,9 @@ export function createWsRouter({
           return
         }
         case "fs.chooseDirectory": {
-          const result = await chooseDirectoryNatively({ prompt: command.prompt, defaultPath: command.defaultPath })
+          const result = command.probe
+            ? { supported: process.platform === "darwin", path: null }
+            : await chooseDirectoryNatively({ prompt: command.prompt, defaultPath: command.defaultPath })
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
           return
         }
@@ -2164,6 +2166,13 @@ export function createWsRouter({
         case "terminal.tail": {
           const result = terminals.getTail(command.terminalId, command.sinceVersion)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          return
+        }
+        default: {
+          // A client newer than this server (its bundle was replaced on disk
+          // before a reload) would otherwise wait forever for an answer.
+          const unknownType = (command as { type?: unknown }).type
+          send(ws, { v: PROTOCOL_VERSION, type: "error", id, message: `Unknown command: ${String(unknownType)}` })
           return
         }
       }
